@@ -9,7 +9,9 @@ const fetchAPI = async (
   const url = `${BASE_URL}${endpoint}`;
   const options = {
     method: method,
-    headers: headers,
+    headers: {
+      ...headers,
+    },
     body: body,
   };
 

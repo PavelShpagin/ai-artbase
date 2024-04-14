@@ -27,6 +27,9 @@ app.include_router(arts.router)
 app.include_router(auth.router)
 app.include_router(categories.router)
 
+from chroma_services import *
+
+print(collection_prompts.count())
 
 
 

@@ -15,7 +15,7 @@ import {
   useDisclosure,
 } from "@chakra-ui/react";
 import PurpleButton from "./Buttons";
-import { BASE_URL } from "../services/api";
+import fetchAPI from "../services/api";
 import { useUser } from "../contexts/UserContext";
 
 const ImageUploadModal = () => {
@@ -46,17 +46,12 @@ const ImageUploadModal = () => {
     }
     setIsPublishing(true);
     const formData = new FormData();
-    console.log(user.user);
     formData.append("prompt", prompt);
     formData.append("image", selectedFile);
-    formData.append("owner_id", user.user.id);
+    formData.append("owner_id", user.id);
 
     try {
-      await axios.post(`${BASE_URL}/arts/`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      await fetchAPI(`/arts/`, "POST", formData);
       onClose();
       // reset state for next upload
       setPrompt("");
