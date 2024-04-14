@@ -16,8 +16,9 @@ import {
 } from "@chakra-ui/react";
 import PurpleButton from "./Buttons";
 import { BASE_URL } from "../services/api";
+import { useUser } from "../contexts/UserContext";
 
-const ImageUploadModal = (user) => {
+const ImageUploadModal = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedFile, setSelectedFile] = useState(null);
   const [prompt, setPrompt] = useState("");
@@ -25,6 +26,7 @@ const ImageUploadModal = (user) => {
   const [imagePreview, setImagePreview] = useState("");
   const [imageWidth, setImageWidth] = useState("auto");
   const [isPublishing, setIsPublishing] = useState(false);
+  const { user, setUser } = useUser();
 
   const handleFilesSelected = (event) => {
     const file = event.target.files[0];

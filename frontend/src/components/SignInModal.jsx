@@ -24,25 +24,37 @@ import PurpleButton from "./Buttons";
 import { useGoogleLogin } from "@react-oauth/google";
 import fetchAPI from "../services/api";
 import { MdErrorOutline } from "react-icons/md";
+import { useUser } from "../contexts/UserContext";
 
-const SignInModal = ({ setUser, isOpen, onClose }) => {
+const SignInModal = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { user, setUser } = useUser();
 
   const handleGoogleSuccess = async (response) => {
     try {
       console.log(response.access_token);
 
-      const data = await fetchAPI("/auth/google", "POST", {
-        access_token: response.access_token,
-      });
+      const data = await fetchAPI(
+        "/auth/google",
+        "POST",
+        JSON.stringify({
+          access_token: response.access_token,
+        }),
+        {
+          "Content-Type": "application/json",
+        }
+      );
 
       console.log("User authenticated:", data);
       localStorage.setItem("token", data.access_token);
-      console.log(data);
+      const userData = await fetchAPI("/users/me", "GET", null, {
+        Authorization: `Bearer ${data.access_token}`,
+      });
+      setUser(userData);
       onClose();
     } catch (error) {
       console.error("Error during Google login:", error);
@@ -69,6 +81,7 @@ const SignInModal = ({ setUser, isOpen, onClose }) => {
       errorFlag = true;
     } else if (!validateEmail(email)) {
       setErrors((prev) => ({ ...prev, email: "Invalid email" }));
+      errorFlag = true;
     } else {
       setErrors((prev) => ({ ...prev, email: "" }));
     }
@@ -83,22 +96,17 @@ const SignInModal = ({ setUser, isOpen, onClose }) => {
     if (!errorFlag) {
       try {
         setLoading(true);
-        const response = await fetch("http://127.0.0.1:8000/token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({
+        const data = await fetchAPI(
+          "/token",
+          "POST",
+          new URLSearchParams({
             username: email,
             password: password,
           }),
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || "An error occurred");
-        }
-
-        const data = await response.json();
+          {
+            "Content-Type": "application/x-www-form-urlencoded",
+          }
+        );
         console.log("Authentication successful:", data);
         localStorage.setItem("token", data.access_token);
         const userData = await fetchAPI("/users/me", "GET", null, {
@@ -122,9 +130,7 @@ const SignInModal = ({ setUser, isOpen, onClose }) => {
     <Modal isOpen={isOpen} onClose={onClose} isCentered>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader fontWeight="bold" ModalContent>
-          Sign Up
-        </ModalHeader>
+        <ModalHeader fontWeight="bold">Sign Up</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
           {error && (

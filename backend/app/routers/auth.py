@@ -23,11 +23,12 @@ def create_access_token(data: dict):
 @router.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
+    print(user)
     user_created = False
     if not user:
         user_created = True
         hashed_password = pwd_context.hash(form_data.password)
-        new_user = models.User(email=form_data.username, username=extract_username(form_data.username), password=hashed_password, verified=False)
+        new_user = models.User(email=form_data.username, username=extract_username(form_data.username), password=hashed_password)
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
@@ -37,7 +38,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     elif not pwd_context.verify(form_data.password, user.password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     
-    access_token = create_access_token(data={"sub": user.id})
+    access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "created": user_created}
 
 @router.post("/auth/google")
@@ -55,43 +56,26 @@ async def google_authenticate(access_token: str = Body(..., embed=True), db: Ses
             email=google_user_info["email"],
             username=google_user_info["name"],
             picture=google_user_info["picture"],
-            verified=True,
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
-    access_token = create_access_token(data={"sub": user.id})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-def get_current_user(db: Session, token: str) -> models.User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    else:
+        user.picture = google_user_info["picture"]
+    db.commit()
+    db.refresh(user)
     
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return {"access_token": access_token, "token_type": "bearer"}
+    
+@router.get("/users/me")
+async def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int = payload.get("sub")
         if user_id is None:
-            raise credentials_exception
-        
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
         user = db.query(models.User).filter(models.User.id == user_id).first()
         if user is None:
-            raise credentials_exception
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         return user
-    except JWTError:
-        raise credentials_exception
-    
-@router.get("/users/me")
-async def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    print(f"Received token: {token}")
-    user = get_current_user(db, token)
-    return user
-    
-def filter_chroma(results, threshold = 0.47):
-    int_ids = [int(id_) for id_ in results["ids"][0]]
-    distances = results["distances"][0]
-    filtered_ids = [id_ for id_, distance in zip(int_ids, distances) if distance < threshold]
-
-    return filtered_ids
+    except JWTError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))

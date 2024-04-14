@@ -1,40 +1,24 @@
 export const BASE_URL = "http://127.0.0.1:8001";
 
-//experimental
 const fetchAPI = async (
   endpoint,
   method = "GET",
-  payload = null,
+  body = null,
   headers = {}
 ) => {
   const url = `${BASE_URL}${endpoint}`;
   const options = {
-    method,
-    headers: {},
+    method: method,
+    headers: headers,
+    body: body,
   };
 
-  if (payload instanceof FormData) {
-    options.body = payload;
-  } else if (payload && method === "POST") {
-    options.body = JSON.stringify(payload);
-    options.headers["Content-Type"] = "application/json";
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "An error occurred");
   }
-
-  Object.keys(headers).forEach((key) => {
-    options.headers[key] = headers[key];
-  });
-
-  try {
-    const response = await fetch(url, options);
-    if (!response.ok)
-      throw new Error(
-        `Network response was not ok, status: ${response.status}`
-      );
-    return await response.json();
-  } catch (error) {
-    console.error("Failed to fetch:", error);
-    throw error;
-  }
+  return await response.json();
 };
 
 export default fetchAPI;

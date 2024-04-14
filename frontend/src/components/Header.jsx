@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Icon,
   Box,
@@ -29,14 +29,16 @@ import { MdHistory } from "react-icons/md";
 import PurpleButton from "./Buttons";
 import { useNavigate } from "react-router-dom";
 import SignInModal from "./SignInModal";
+import { useUser } from "../contexts/UserContext";
 
-const UserMenu = ({ user, setUser, onSignOut }) => {
+const UserMenu = ({ onSignOut }) => {
   const navigate = useNavigate();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { user, setUser } = useUser();
 
   const handleSignOut = () => {
     setUser(null);
-    localStorage.removeItem("user");
+    localStorage.removeItem("token");
   };
 
   const handleAnalyticsClick = () => {
@@ -72,13 +74,19 @@ const UserMenu = ({ user, setUser, onSignOut }) => {
   );
 };
 
-const Header = ({ user, setUser, onUploadClick, onSearchChange }) => {
+const Header = ({ onUploadClick, onSearchChange }) => {
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { user, setUser } = useUser();
+
   const searchInputBg = useColorModeValue("gray.50", "gray.700");
 
   const handleSignInClick = () => setIsSignInModalOpen(true);
   const handleSignInModalClose = () => setIsSignInModalOpen(false);
+
+  useEffect(() => {
+    console.log(user);
+  }, [user]);
 
   return (
     <Box
@@ -132,11 +140,13 @@ const Header = ({ user, setUser, onUploadClick, onSearchChange }) => {
           />
         </InputGroup>
         <Flex align="center" gap={2}>
-          {user ? (
-            <>
-              <PurpleButton name="Upload" onClick={onUploadClick} />
-              <UserMenu user={user} setUser={setUser} />
-            </>
+          {localStorage.getItem("token") ? (
+            user && (
+              <>
+                <PurpleButton name="Upload" onClick={onUploadClick} />
+                <UserMenu user={user} setUser={setUser} />
+              </>
+            )
           ) : (
             <PurpleButton name="Sign In" onClick={handleSignInClick} />
           )}
