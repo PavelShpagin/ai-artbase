@@ -22,7 +22,7 @@ import {
 import { FcGoogle } from "react-icons/fc";
 import PurpleButton from "./Buttons";
 import { useGoogleLogin } from "@react-oauth/google";
-import fetchAPI from "../services/api.js";
+import fetchAPI from "../services/api";
 import { MdErrorOutline } from "react-icons/md";
 
 const SignInModal = ({ setUser, isOpen, onClose }) => {

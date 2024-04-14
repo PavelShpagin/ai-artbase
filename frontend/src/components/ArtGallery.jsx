@@ -18,16 +18,19 @@ const ArtGallery = ({ arts }) => {
   console.log(arts);
 
   return (
-    <Gallery
-      photos={arts.map((art) => ({
-        src: art.src,
-        width: art.width,
-        height: art.height,
-        id: art.id,
-      }))}
-      direction={"column"}
-      onClick={handleClick}
-    />
+    Array.isArray(arts) &&
+    arts.length > 0 && (
+      <Gallery
+        photos={arts.map((art) => ({
+          src: art.src,
+          width: art.width,
+          height: art.height,
+          id: art.id,
+        }))}
+        direction={"column"}
+        onClick={handleClick}
+      />
+    )
   );
 };
 

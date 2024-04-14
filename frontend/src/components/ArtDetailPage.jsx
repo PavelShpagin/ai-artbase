@@ -10,7 +10,7 @@ import {
 } from "@chakra-ui/react";
 import { useLocation } from "react-router-dom";
 import ArtGallery from "./ArtGallery";
-import fetchAPI from "../services/api.js";
+import fetchAPI from "../services/api";
 
 const ArtDetailPage = () => {
   const location = useLocation();

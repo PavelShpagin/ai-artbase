@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, VStack, Heading } from "@chakra-ui/react";
 import axios from "axios";
-import { BASE_URL } from "../services/api.js";
+import { BASE_URL } from "../services/api";
 import GradientLineChart from "./GradientLineGraph";
 import TopCategoriesBarChart from "./TopCategoriesBarChart";
 import { Flex } from "@chakra-ui/react";
