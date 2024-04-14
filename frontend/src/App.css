@@ -1,42 +1,56 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
+
+:root {
+    --font-primary: 'Pacifico', cursive;
+    --color-primary: #7426EF;
+    --color-secondary: #00C3CC;
+    --gradient-primary: linear-gradient(to bottom, var(--color-secondary), var(--color-primary));
+    --box-shadow: 1px 2px 9px rgba(0, 0, 0, 0.12);
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+body,
+h1,
+h2,
+h3,
+p {
+    margin: 0;
+    padding: 0;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.header {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid #E2E8F0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.ai-artbase-logo {
+    font-family: var(--font-primary);
+    font-size: 36px;
+    color: transparent;
+    background-image: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    display: inline-block;
 }
 
-.card {
-  padding: 2em;
+
+.react-photo-gallery--gallery img {
+    cursor: pointer;
+    border-radius: 15px;
+    transition: filter 0.5s ease;
 }
 
-.read-the-docs {
-  color: #888;
+.react-photo-gallery--gallery img:hover {
+    filter: brightness(75%);
+}
+
+.react-photo-gallery--gallery {
+    padding-top: 10;
+}
+
+.gallery {
+    padding-top: 20px;
 }
