@@ -16,6 +16,7 @@ export const UserProvider = ({ children }) => {
           });
           setUser(userData);
         } catch (error) {
+          localStorage.removeItem("token");
           console.error("Failed to fetch user:", error);
         }
       };

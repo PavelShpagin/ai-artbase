@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, status
 from sqlalchemy.orm import Session
-import models
+from .. import models
 import httpx
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone    
-from config import *
-from utils import *
+from ..config import *
+from ..utils import *
 
 router = APIRouter()
 

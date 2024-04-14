@@ -1,6 +1,6 @@
 import chromadb
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
-from config import *
+from .config import *
 
 class ChromaService:
     def __init__(self):

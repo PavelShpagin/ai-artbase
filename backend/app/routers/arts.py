@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import case, func
-import schemas, models
+from .. import schemas, models
 from typing import List
 import shutil
 import uuid
 from PIL import Image
-from chroma_services import *
-from config import *
-from utils import *
+from ..chroma_services import *
+from ..config import *
+from ..utils import *
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ router = APIRouter()
 async def create_art(prompt: str = Form(...), image: UploadFile = File(...), owner_id: int = Form(...), db: Session = Depends(get_db)): 
     file_extension = image.filename.split(".")[-1]
     unique_filename = f"{uuid.uuid4()}.{file_extension}"
-    image_path = f"../images/{unique_filename}"
+    image_path = f"./images/{unique_filename}"
 
     with open(image_path, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)

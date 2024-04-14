@@ -16,6 +16,7 @@ class User(UserCreate):
     description: str =""
     hidden: bool = False
     premium: bool = False
+    role: str = "user"
     
     class Config:
         orm_mode = True

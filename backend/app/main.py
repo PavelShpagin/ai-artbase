@@ -1,9 +1,10 @@
 from fastapi import FastAPI
-from database import Base, engine
+from .database import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import models
-from routers import arts, auth, categories
+from . import models
+from .routers import arts, auth, categories
+import uvicorn
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -14,7 +15,7 @@ origins = [
     # "https://mydomain.com", #production domain
 ]
 
-app.mount("/images", StaticFiles(directory="../images"), name="images")
+app.mount("/images", StaticFiles(directory="./images"), name="images")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -27,9 +28,10 @@ app.include_router(arts.router)
 app.include_router(auth.router)
 app.include_router(categories.router)
 
-from chroma_services import *
+from .chroma_services import *
 
 print(collection_prompts.count())
 
-
+#if __name__ == "__main__":
+#    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
 
