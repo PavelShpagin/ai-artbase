@@ -4,7 +4,8 @@ const fetchAPI = async (
   endpoint,
   method = "GET",
   body = null,
-  headers = {}
+  headers = {},
+  as_json = true
 ) => {
   const url = `${BASE_URL}${endpoint}`;
   const options = {
@@ -20,7 +21,11 @@ const fetchAPI = async (
     const errorData = await response.json();
     throw new Error(errorData.detail || "An error occurred");
   }
-  return await response.json();
+  if (as_json) {
+    return await response.json();
+  } else {
+    return response;
+  }
 };
 
 export default fetchAPI;

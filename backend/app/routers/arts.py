@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile, Form
+from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import case, func
 from .. import schemas, models
@@ -70,3 +70,10 @@ async def read_art_dates(db: Session = Depends(get_db)):
     art_dates = db.query(models.Art.date).all()
     dates = [art_date[0].strftime("%Y-%m-%d %H:%M:%S") for art_date in art_dates]
     return dates
+
+@router.get("/arts/{user_id}", response_model=List[schemas.Art])
+def get_user_arts(user_id: int, db: Session = Depends(get_db)):
+    arts = db.query(models.Art).filter(models.Art.owner_id == user_id).all()
+    if not arts:
+        raise HTTPException(status_code=404, detail="No arts found for this user.")
+    return arts

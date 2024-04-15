@@ -15,9 +15,12 @@ import {
 import { FiMoreVertical } from "react-icons/fi";
 import { useAuthRedirect } from "../hooks/useAuthRedirect";
 import fetchAPI from "../services/api";
+import { useUser } from "../contexts/UserContext";
 
 const AdminTab = () => {
   const [usersData, setUsersData] = useState([]);
+  const { user, setUser } = useUser();
+
   useAuthRedirect();
 
   const bg = useColorModeValue("white", "gray.800");
@@ -44,8 +47,8 @@ const AdminTab = () => {
         "Content-Type": "application/json",
       }
     );
-    const updatedUsers = usersData.map((user) =>
-      user.id === id ? { ...user, role: newRole } : user
+    const updatedUsers = usersData.map((userData) =>
+      userData.id === id ? { ...userData, role: newRole } : userData
     );
     setUsersData(updatedUsers);
   };
@@ -54,9 +57,9 @@ const AdminTab = () => {
     <Box bg={bg} p={5} shadow="base" borderRadius="lg">
       <Flex direction="column" gap={6}>
         {usersData.length > 0 &&
-          usersData.map((user) => (
+          usersData.map((userData) => (
             <Flex
-              key={user.id}
+              key={userData.id}
               align="center"
               p={4}
               boxShadow="md"
@@ -64,36 +67,44 @@ const AdminTab = () => {
               bg="gray.50"
               justifyContent="space-between"
             >
-              <Avatar name={user.username} mr={4} />
+              <Avatar name={userData.username} mr={4} />
               <Box flex="1" pr={4}>
                 <Flex alignItems="center" mb={2}>
                   <Text fontWeight="bold" mr={2}>
-                    {user.username}
+                    {userData.username}
                   </Text>
-                  <Badge colorScheme={user.role === "admin" ? "green" : "gray"}>
-                    {user.role === "admin" ? "Admin" : "User"}
+                  <Badge
+                    colorScheme={userData.role === "admin" ? "green" : "gray"}
+                  >
+                    {userData.role === "admin" ? "Admin" : "User"}
                   </Badge>
                 </Flex>
-                <Text fontSize="sm">{user.email}</Text>
+                <Text fontSize="sm">{userData.email}</Text>
               </Box>
-              {user.id != import.meta.env.VITE_ADMIN_ID && (
-                <Menu>
-                  <MenuButton
-                    as={IconButton}
-                    icon={<FiMoreVertical />}
-                    variant="outline"
-                    aria-label="Options"
-                  />
-                  <MenuList>
-                    <MenuItem onClick={() => changeUserRole(user.id, "user")}>
-                      Set as User
-                    </MenuItem>
-                    <MenuItem onClick={() => changeUserRole(user.id, "admin")}>
-                      Set as Admin
-                    </MenuItem>
-                  </MenuList>
-                </Menu>
-              )}
+              {user &&
+                userData.id != import.meta.env.VITE_ADMIN_ID &&
+                userData.id != user.id && (
+                  <Menu>
+                    <MenuButton
+                      as={IconButton}
+                      icon={<FiMoreVertical />}
+                      variant="outline"
+                      aria-label="Options"
+                    />
+                    <MenuList>
+                      <MenuItem
+                        onClick={() => changeUserRole(userData.id, "user")}
+                      >
+                        Set as User
+                      </MenuItem>
+                      <MenuItem
+                        onClick={() => changeUserRole(userData.id, "admin")}
+                      >
+                        Set as Admin
+                      </MenuItem>
+                    </MenuList>
+                  </Menu>
+                )}
             </Flex>
           ))}
       </Flex>

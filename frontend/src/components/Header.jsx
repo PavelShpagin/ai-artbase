@@ -52,6 +52,11 @@ const UserMenu = ({ onSignOut }) => {
     navigate("/admin");
   };
 
+  const handleProfileCLick = () => {
+    onClose();
+    navigate("/profile");
+  };
+
   return (
     <Menu isOpen={isOpen} onClose={onClose}>
       <MenuButton
@@ -69,13 +74,15 @@ const UserMenu = ({ onSignOut }) => {
             Admin Tab
           </MenuItem>
         )}
-        <MenuItem icon={<FiUser />}>Profile</MenuItem>
-        <MenuItem icon={<MdHistory />}>History</MenuItem>
-        <MenuItem icon={<FiHeart />}>Liked</MenuItem>
+        <MenuItem icon={<FiUser />} onClick={handleProfileCLick}>
+          Profile
+        </MenuItem>
+        {/*<MenuItem icon={<MdHistory />}>History</MenuItem>*/}
+        {/*<MenuItem icon={<FiHeart />}>Liked</MenuItem>*/}
         <MenuItem icon={<FiBarChart2 />} onClick={handleAnalyticsClick}>
           Analytics
         </MenuItem>
-        <MenuItem icon={<FiUsers />}>Followers</MenuItem>
+        {/*<MenuItem icon={<FiUsers />}>Followers</MenuItem>*/}
         <MenuDivider m={0} />
         <MenuItem icon={<FiLogOut />} onClick={handleSignOut}>
           Sign out

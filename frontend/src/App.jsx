@@ -12,6 +12,7 @@ import ArtDetailPage from "./components/ArtDetailPage";
 import ImageUploadModal from "./components/ImageUploadModal";
 import AnalyticsPage from "./components/AnalyticsPage";
 import AdminTab from "./components/AdminTab";
+import UserProfile from "./components/UserProfile";
 import UserProvider from "./contexts/UserContext";
 import fetchAPI from "./services/api";
 import { GoogleOAuthProvider } from "@react-oauth/google";
@@ -66,6 +67,7 @@ function App() {
                 <Route path="/art/:id" element={<ArtDetailPage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/admin" element={<AdminTab />} />
+                <Route path="/profile" element={<UserProfile />} />
               </Routes>
             </Box>
           </UserProvider>
