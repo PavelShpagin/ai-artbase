@@ -24,6 +24,7 @@ import {
   FiBarChart2,
   FiUsers,
   FiLogOut,
+  FiTrello,
 } from "react-icons/fi";
 import { MdHistory } from "react-icons/md";
 import PurpleButton from "./Buttons";
@@ -38,12 +39,17 @@ const UserMenu = ({ onSignOut }) => {
 
   const handleSignOut = () => {
     setUser(null);
-    localStorage.removeItem("token");
+    localStorage.setItem("token", "");
   };
 
   const handleAnalyticsClick = () => {
     onClose();
     navigate("/analytics");
+  };
+
+  const handleAdminCLick = () => {
+    onClose();
+    navigate("/admin");
   };
 
   return (
@@ -55,9 +61,14 @@ const UserMenu = ({ onSignOut }) => {
         p={0}
         minW={0}
       >
-        <Avatar size="md" src={user.picture} />
+        <Avatar name={user.username} size="md" src={user.picture} />
       </MenuButton>
       <MenuList>
+        {user.role === "admin" && (
+          <MenuItem icon={<FiTrello />} onClick={handleAdminCLick}>
+            Admin Tab
+          </MenuItem>
+        )}
         <MenuItem icon={<FiUser />}>Profile</MenuItem>
         <MenuItem icon={<MdHistory />}>History</MenuItem>
         <MenuItem icon={<FiHeart />}>Liked</MenuItem>
@@ -78,8 +89,6 @@ const Header = ({ onUploadClick, onSearchChange }) => {
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user, setUser } = useUser();
-
-  const searchInputBg = useColorModeValue("gray.50", "gray.700");
 
   const handleSignInClick = () => setIsSignInModalOpen(true);
   const handleSignInModalClose = () => setIsSignInModalOpen(false);

@@ -206,16 +206,11 @@ const SignInModal = ({ isOpen, onClose }) => {
                 borderRadius="full"
                 size="lg"
                 mt={1}
+                mb={2}
               >
                 Sign in with Google
               </Button>
             </Stack>
-            <Text pt={2} fontSize={"sm"}>
-              Already have an account?{" "}
-              <Link color={useColorModeValue("blue.500", "blue.300")} href="#">
-                Log in
-              </Link>
-            </Text>
           </VStack>
         </ModalBody>
       </ModalContent>

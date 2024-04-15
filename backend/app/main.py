@@ -3,7 +3,7 @@ from .database import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from . import models
-from .routers import arts, auth, categories
+from .routers import arts, auth, categories, users
 import uvicorn
 
 models.Base.metadata.create_all(bind=engine)
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(arts.router)
 app.include_router(auth.router)
 app.include_router(categories.router)
+app.include_router(users.router)
 
 from .chroma_services import *
 

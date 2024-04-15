@@ -11,6 +11,7 @@ import ArtGallery from "./components/ArtGallery";
 import ArtDetailPage from "./components/ArtDetailPage";
 import ImageUploadModal from "./components/ImageUploadModal";
 import AnalyticsPage from "./components/AnalyticsPage";
+import AdminTab from "./components/AdminTab";
 import UserProvider from "./contexts/UserContext";
 import fetchAPI from "./services/api";
 import { GoogleOAuthProvider } from "@react-oauth/google";
@@ -18,12 +19,11 @@ import theme from "./theme";
 import "./App.css";
 //import Gallery from "react-photo-gallery";
 
-const clientId =
-  "773557299658-hhspu7b958jg9iad4onunnr1onojuomq.apps.googleusercontent.com";
-
 function App() {
   const [arts, setArts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+
+  console.log(import.meta.env.VITE_CLIENT_ID);
 
   useEffect(() => {
     const fetchArts = async () => {
@@ -46,7 +46,7 @@ function App() {
   };
 
   return (
-    <GoogleOAuthProvider clientId={clientId}>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_CLIENT_ID}>
       <Router>
         <ChakraProvider theme={theme}>
           <UserProvider>
@@ -65,6 +65,7 @@ function App() {
                 <Route path="/" element={<ArtGallery arts={arts} />} />
                 <Route path="/art/:id" element={<ArtDetailPage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/admin" element={<AdminTab />} />
               </Routes>
             </Box>
           </UserProvider>

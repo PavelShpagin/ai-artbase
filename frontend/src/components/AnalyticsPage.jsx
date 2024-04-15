@@ -6,10 +6,12 @@ import GradientLineChart from "./GradientLineGraph";
 import TopCategoriesBarChart from "./TopCategoriesBarChart";
 import { Flex } from "@chakra-ui/react";
 import "chart.js/auto";
+import { useAuthRedirect } from "../hooks/useAuthRedirect";
 
 const AnalyticsPage = () => {
   const [labels, setLabels] = useState([]);
   const [data, setData] = useState([]);
+  useAuthRedirect();
 
   useEffect(() => {
     axios
