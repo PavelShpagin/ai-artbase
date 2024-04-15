@@ -1,10 +1,14 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import Gallery from "react-photo-gallery";
 import { useNavigate } from "react-router-dom";
 
 const ArtGallery = ({ arts }) => {
-  const galleryContainerRef = useRef(null);
+  //const galleryContainerRef = useRef(null);
   let navigate = useNavigate();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleClick = (event, { photo, index }) => {
     console.log(photo);
@@ -12,7 +16,7 @@ const ArtGallery = ({ arts }) => {
       top: 0,
       behavior: "instant",
     });
-    navigate(`/art/${photo.id}`, { state: { photo } });
+    navigate(`/art/${photo.key}`, { state: { photo } });
   };
 
   console.log(arts);
@@ -25,7 +29,7 @@ const ArtGallery = ({ arts }) => {
           src: art.src,
           width: art.width,
           height: art.height,
-          id: art.id,
+          key: String(art.id),
         }))}
         direction={"column"}
         onClick={handleClick}

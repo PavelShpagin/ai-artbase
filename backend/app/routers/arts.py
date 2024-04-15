@@ -38,7 +38,7 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
 
     results = collection_categories.query(query_texts=[prompt], include=["distances", "documents"])
     print(results)
-    filtered_ids = filter_chroma(results, 0.35)
+    filtered_ids = filter_chroma(results, 0.45)
 
     if(filtered_ids):
         associations = [{"art_id": db_art.id, "category_id": category_id} for category_id in filtered_ids]
@@ -55,8 +55,8 @@ async def read_arts(limit: int = 1000, db: Session = Depends(get_db)):
 @router.get("/search/", response_model=List[schemas.Art])
 async def search_arts(query: str, db: Session = Depends(get_db)):
     results = collection_prompts.query(query_texts=[query], include=["distances"])  
-    
-    filtered_ids = filter_chroma(results)
+    print(results)
+    filtered_ids = filter_chroma(results, 0.4)
     
     if not filtered_ids:
         return []

@@ -8,7 +8,18 @@ class ChromaService:
         self.client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 
     def get(self, name: str):
-        return self.client.get_or_create_collection(name=name, embedding_function=self.embedding_function)
+        try:
+            collection = self.client.get_collection(name=name, embedding_function=self.embedding_function)
+        except Exception as e:
+            collection = self.client.create_collection(
+                name=name,
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=self.embedding_function
+            )
+        return collection
+    
+    def delete(self, name: str):
+         self.client.delete_collection(name=name)
 
 chroma = ChromaService()
 
