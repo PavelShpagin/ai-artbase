@@ -64,8 +64,8 @@ async def read_arts(limit: int = 1000, db: Session = Depends(get_db)):
 @router.get("/search/", response_model=List[schemas.Art])
 async def search_arts(query: str, db: Session = Depends(get_db)):
     results = collection_prompts.query(query_texts=[query], include=["distances"])  
-    
-    filtered_ids = filter_chroma(results)
+    print(results)
+    filtered_ids = filter_chroma(results, 0.4)
     
     if not filtered_ids:
         return []

@@ -5,6 +5,7 @@ import {
   Routes,
   Route,
   useNavigate,
+  useLocation,
 } from "react-router-dom";
 import Header from "./components/Header";
 import ArtGallery from "./components/ArtGallery";
@@ -13,6 +14,7 @@ import ImageUploadModal from "./components/ImageUploadModal";
 import AnalyticsPage from "./components/AnalyticsPage";
 import AdminTab from "./components/AdminTab";
 import UserProfile from "./components/UserProfile";
+import MainGallery from "./components/MainGallery";
 import UserProvider from "./contexts/UserContext";
 import fetchAPI from "./services/api";
 import { GoogleOAuthProvider } from "@react-oauth/google";
@@ -20,25 +22,24 @@ import theme from "./theme";
 import "./App.css";
 //import Gallery from "react-photo-gallery";
 
+<<<<<<< HEAD
 function App() {
   const [arts, setArts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+=======
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+>>>>>>> d8c9af58edabbb75d331a1f228de1d5d4069d5b3
 
   useEffect(() => {
-    const fetchArts = async () => {
-      const endpoint = searchQuery
-        ? `/search/?query=${encodeURIComponent(searchQuery)}`
-        : "/arts/";
-      try {
-        const response = await fetchAPI(endpoint);
-        console.log(response);
-        setArts(response);
-      } catch (error) {
-        console.error("Failed to fetch arts:", error);
-      }
-    };
-    fetchArts();
-  }, [searchQuery]);
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+};
+
+function App() {
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleUploadClick = () => {
     document.getElementById("file-upload").click();
@@ -59,9 +60,14 @@ function App() {
               }}
             />
             <ImageUploadModal />
+
             <Box pt={84}>
+              <ScrollToTop />
               <Routes>
-                <Route path="/" element={<ArtGallery arts={arts} />} />
+                <Route
+                  path="/"
+                  element={<MainGallery searchQuery={searchQuery} />}
+                />
                 <Route path="/art/:id" element={<ArtDetailPage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/admin" element={<AdminTab />} />
