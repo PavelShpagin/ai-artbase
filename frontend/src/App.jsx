@@ -24,8 +24,6 @@ function App() {
   const [arts, setArts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
 
-  console.log(import.meta.env.VITE_CLIENT_ID);
-
   useEffect(() => {
     const fetchArts = async () => {
       const endpoint = searchQuery

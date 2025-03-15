@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+chromadb
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+pillow 
+psycopg2
+openai

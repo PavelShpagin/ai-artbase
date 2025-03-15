@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from .database import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from . import models
 from .routers import arts, auth, categories, users
 import uvicorn
@@ -12,10 +11,9 @@ app = FastAPI()
 
 origins = [
     "http://localhost:5173",
-    # "https://mydomain.com", #production domain
+    "https://aiartbase.com", #production domain
 ]
 
-app.mount("/images", StaticFiles(directory="./images"), name="images")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

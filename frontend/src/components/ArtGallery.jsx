@@ -14,22 +14,28 @@ const ArtGallery = ({ arts }) => {
     });
     navigate(`/art/${photo.id}`, { state: { photo } });
   };
+  console.log(import.meta.env.VITE_CLIENT_ID);
 
-  console.log(arts);
+  // Add default dimensions if width/height are missing
+  const processedArts =
+    Array.isArray(arts) && arts.length > 0
+      ? arts.map((art) => ({
+          src: art.src,
+          width: art.width || 1, // Default width if missing
+          height: art.height || 1, // Default height if missing
+          id: art.id,
+        }))
+      : [];
 
   return (
-    Array.isArray(arts) &&
-    arts.length > 0 && (
-      <Gallery
-        photos={arts.map((art) => ({
-          src: art.src,
-          width: art.width,
-          height: art.height,
-          id: art.id,
-        }))}
-        direction={"column"}
-        onClick={handleClick}
-      />
+    processedArts.length > 0 && (
+      <div className="gallery">
+        <Gallery
+          photos={processedArts}
+          direction={"column"}
+          onClick={handleClick}
+        />
+      </div>
     )
   );
 };

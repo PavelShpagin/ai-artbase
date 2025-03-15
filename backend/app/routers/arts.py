@@ -3,30 +3,40 @@ from sqlalchemy.orm import Session
 from sqlalchemy import case, func
 from .. import schemas, models
 from typing import List
-import shutil
 import uuid
 from PIL import Image
+import io
+import hashlib
 from ..chroma_services import *
 from ..config import *
 from ..utils import *
+from ..r2_storage import upload_image_to_r2
 
 router = APIRouter()
 
 @router.post("/arts/", response_model=schemas.Art)
 async def create_art(prompt: str = Form(...), image: UploadFile = File(...), owner_id: int = Form(...), db: Session = Depends(get_db)): 
+    # Read image data
+    image_data = await image.read()
+    image.file.seek(0)  # Reset file pointer
+    
+    # Generate hash from image data
+    image_hash = hashlib.md5(image_data).hexdigest()
     file_extension = image.filename.split(".")[-1]
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
-    image_path = f"./images/{unique_filename}"
-
-    with open(image_path, "wb") as buffer:
-        shutil.copyfileobj(image.file, buffer)
-
-    image.file.seek(0)
-    with Image.open(image.file) as img:
+    unique_filename = f"{image_hash}.{file_extension}"
+    
+    # Get image dimensions
+    with Image.open(io.BytesIO(image_data)) as img:
         width, height = img.size
     
-    url_path = f"{IMAGE_BASE_URL}/{unique_filename}"
-    db_art = models.Art(width=width, height=height, prompt=prompt, src=url_path, owner_id=owner_id)
+    # Upload to R2 instead of saving locally
+    try:
+        image_url = await upload_image_to_r2(image, unique_filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload image to R2: {str(e)}")
+    
+    # Store the R2 URL in the database
+    db_art = models.Art(width=width, height=height, prompt=prompt, src=image_url, owner_id=owner_id)
     db.add(db_art)
     db.commit()
     db.refresh(db_art)
@@ -37,7 +47,6 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
     )
 
     results = collection_categories.query(query_texts=[prompt], include=["distances", "documents"])
-    print(results)
     filtered_ids = filter_chroma(results, 0.35)
 
     if(filtered_ids):
