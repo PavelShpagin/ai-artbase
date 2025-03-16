@@ -22,14 +22,8 @@ import theme from "./theme";
 import "./App.css";
 //import Gallery from "react-photo-gallery";
 
-<<<<<<< HEAD
-function App() {
-  const [arts, setArts] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
-=======
 const ScrollToTop = () => {
   const { pathname } = useLocation();
->>>>>>> d8c9af58edabbb75d331a1f228de1d5d4069d5b3
 
   useEffect(() => {
     window.scrollTo(0, 0);

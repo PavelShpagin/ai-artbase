@@ -25,3 +25,5 @@ dist-ssr
 
 frontend/.env
 backend/.env
+scraper/.env
+scraper/node_modules

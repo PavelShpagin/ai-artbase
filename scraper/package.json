@@ -1,0 +1,29 @@
+{
+  "name": "scraper",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node civitai-scraper.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.8.3",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.7",
+    "form-data": "^4.0.2",
+    "fs": "^0.0.1-security",
+    "https": "^1.0.0",
+    "install": "^0.13.0",
+    "net": "^1.0.2",
+    "path": "^0.12.7",
+    "puppeteer": "^24.4.0",
+    "puppeteer-core": "^24.4.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "xlsx": "^0.18.5"
+  }
+}

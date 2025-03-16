@@ -100,3 +100,19 @@ class ArtMetadataSchema(BaseModel):
 
     class Config:
         orm_mode = True
+
+class ArtMetadataCreate(BaseModel):
+    art_id: int
+    neg_prompt_text: str = ""
+    comments: str = ""
+    upvotes: int = 0
+
+class ProcessedLink(BaseModel):
+    link: str
+
+class ProcessedLinkResponse(BaseModel):
+    id: int
+    link: str
+    
+    class Config:
+        orm_mode = True

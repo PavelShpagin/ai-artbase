@@ -103,3 +103,9 @@ class ArtMetadata(Base):
     upvotes = Column(Integer)
     
     art = relationship("Art", back_populates="art_metadata")
+
+class ProcessedLink(Base):
+    __tablename__ = 'processed_links'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    link = Column(String, unique=True, index=True)

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from .database import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 from . import models
-from .routers import arts, auth, categories, users
+from .routers import arts, auth, categories, users, processed_links, art_metadata
 from .database import SessionLocal
 import shutil
 import uuid
@@ -11,14 +11,16 @@ from pathlib import Path
 import asyncio
 from threading import Thread
 import json
+from .services.scraper_service import router as scraper_router
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 origins = [
-    "http://localhost:5173",
-    "https://aiartbase.com", #production domain
+    # "http://localhost:5173",
+    # "https://aiartbase.com", #production domain
+    "*"
 ]
 
 app.add_middleware(
@@ -33,7 +35,11 @@ app.include_router(arts.router)
 app.include_router(auth.router)
 app.include_router(categories.router)
 app.include_router(users.router)
+app.include_router(processed_links.router)
+app.include_router(art_metadata.router)
+app.include_router(scraper_router, prefix="/scraper", tags=["scraper"])
 
+'''
 from .chroma_services import *
 
 print(collection_prompts.count())
@@ -124,16 +130,11 @@ def run_in_thread(fn):
     thread = Thread(target=run)
     thread.start()
 
-'''
 @app.on_event("startup")
 def startup_event():
     run_in_thread(main)
 
-'''
 
-
-
-'''
 # categories injection setup
 
 from .models import Category
