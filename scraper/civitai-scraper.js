@@ -253,6 +253,17 @@ async function safeWheel(page, options) {
   try {
     console.log("scrolling...");
     await smoothScroll(page, options.deltaY);
+
+    // Introduce a random long pause after a certain number of scrolls
+    if (options.scrollCount && options.scrollCount % 10 === 0) {
+      const randomPause = 60 * 1000 + Math.floor(Math.random() * 60 * 1000); // 1 to 2 minutes
+      console.log(
+        `Pausing for ${
+          randomPause / 1000
+        } seconds to simulate real user behavior.`
+      );
+      await delay(randomPause);
+    }
   } catch (error) {
     if (error instanceof puppeteer.errors.ProtocolError) {
       console.log("Timeout occurred, retrying...");
@@ -285,7 +296,7 @@ async function mainLoop() {
   console.log("====================================");
 
   // Wait 5 minutes before restarting
-  await delay(5 * 60 * 1000);
+  await delay(120 * 60 * 1000);
 
   // Recursively call mainLoop to continue indefinitely
   await mainLoop();
@@ -341,6 +352,9 @@ async function main() {
 
     // Counter for proxy rotation
     let requestCounter = 0;
+
+    // Update the scrolling logic to pass scrollCount
+    let scrollCount = 0;
 
     while (true) {
       console.log(`New links: ${newLinks.length}`);
@@ -523,7 +537,8 @@ async function main() {
         // Updated scroll approach
         try {
           console.log("pageForList", pageForList);
-          await safeWheel(pageForList, { deltaY: 1000 });
+          scrollCount++;
+          await safeWheel(pageForList, { deltaY: 1000, scrollCount });
         } catch (error) {
           console.error("Error scrolling:", error);
           // Try an alternative scroll method if wheel fails
@@ -563,7 +578,6 @@ async function main() {
 
           // Update references
           browser = newBrowserSetup.browser;
-          page = newBrowserSetup.page;
           pageForList = newBrowserSetup.pageForList;
           pageForLink = newBrowserSetup.pageForLink;
 
