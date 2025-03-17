@@ -1,5 +1,5 @@
 import React from "react";
-import { Button, Spinner, Box } from "@chakra-ui/react";
+import { Button, Box } from "@chakra-ui/react";
 
 const PurpleButton = ({ name, onClick, w, loading }) => {
   return (
@@ -41,7 +41,7 @@ const PurpleButton = ({ name, onClick, w, loading }) => {
         //justifyContent="center"
         //alignItems="center"
       >
-        {loading && <Spinner size="sm" color="white" />}
+        {/* {loading && <Spinner size="sm" color="white" />} */}
       </Box>
       <Box
         visibility={loading ? "hidden" : "visible"}
