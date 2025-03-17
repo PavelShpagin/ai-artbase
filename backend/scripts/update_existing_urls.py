@@ -24,7 +24,7 @@ def update_all_image_urls():
         # Extract just the filename from the old URL
         filename = old_url.split('/')[-1]
         # Create new URL with the custom domain
-        new_url = f"https://aiartbase.com/{filename}"
+        new_url = f"https://cdn.aiartbase.com/{filename}"
         updates.append((new_url, art_id))
     
     # Update all URLs in a separate transaction
