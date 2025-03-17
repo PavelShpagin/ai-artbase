@@ -10,6 +10,7 @@ const axios = require("axios");
 const FormData = require("form-data");
 const { URL } = require("url");
 const crypto = require("crypto");
+const OpenAI = require("openai");
 
 // Replace the existing proxy list with these new proxies
 const proxyList = [
@@ -52,7 +53,7 @@ async function setupBrowserWithProxy(proxyString) {
     defaultNavigationTimeout: 60000,
     defaultTimeout: 60000,
     protocolTimeout: 600000,
-    headless: false,
+    headless: true,
     args: [
       `--proxy-server=${ip}:${port}`,
       "--no-sandbox",
@@ -61,42 +62,6 @@ async function setupBrowserWithProxy(proxyString) {
       "--window-size=1920,1080",
     ],
     ignoreHTTPSErrors: true,
-  });
-
-  // Create and configure pages with proxy authentication
-  const page = await browser.newPage();
-  await page.authenticate({ username, password });
-
-  // Set up page configurations
-  await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-  );
-
-  await page.setViewport({
-    width: 1920,
-    height: 1080,
-    deviceScaleFactor: 1,
-  });
-
-  // Set up stealth
-  await page.evaluateOnNewDocument(() => {
-    Object.defineProperty(navigator, "webdriver", {
-      get: () => false,
-    });
-    Object.defineProperty(navigator, "languages", {
-      get: () => ["en-US", "en"],
-    });
-  });
-
-  const pageForList = await browser.newPage();
-  await pageForList.authenticate({ username, password });
-  await pageForList.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-  );
-  await pageForList.setViewport({
-    width: 1920,
-    height: 1080,
-    deviceScaleFactor: 1,
   });
 
   const pageForLink = await browser.newPage();
@@ -110,12 +75,26 @@ async function setupBrowserWithProxy(proxyString) {
     deviceScaleFactor: 1,
   });
 
-  return { browser, page, pageForList, pageForLink };
+  const pageForList = await browser.newPage();
+  await pageForList.authenticate({ username, password });
+  await pageForList.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+  );
+  await pageForList.setViewport({
+    width: 1920,
+    height: 1080,
+    deviceScaleFactor: 1,
+  });
+
+  return { browser, pageForList, pageForLink };
 }
 
 // Replace hardcoded values with environment variables
-const API_URL = process.env.API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.API_URL || "http://localhost:8000";
 const OWNER_ID = parseInt(process.env.OWNER_ID || "4", 10);
+
+// Import OpenAI and initialize
+const openai = new OpenAI();
 
 // Function to check if a link has been processed
 async function isLinkProcessed(link) {
@@ -133,7 +112,10 @@ async function isLinkProcessed(link) {
 // Function to save a processed link to the database
 async function saveProcessedLink(link) {
   try {
-    await axios.post(`${API_URL}/processed_links/`, { link });
+    // Send link as a query parameter, not form data
+    await axios.post(
+      `${API_URL}/processed_links/?link=${encodeURIComponent(link)}`
+    );
     console.log(`Saved processed link: ${link}`);
   } catch (error) {
     console.error(`Error saving processed link: ${error.message}`);
@@ -162,16 +144,48 @@ async function uploadArtToAPI(
   upvotes
 ) {
   try {
-    // Get image as buffer instead of downloading to temp file
+    // Get image as buffer
     const imageBuffer = await getImageBuffer(imageUrl);
+
+    // Check if promptText is empty and generate a prompt using OpenAI if needed
+    if (!promptText) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "What's in this image?" },
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageUrl,
+                },
+              },
+            ],
+          },
+        ],
+      });
+      promptText = response.choices[0].message.content;
+    }
 
     // Create form data for the API request
     const formData = new FormData();
     formData.append("prompt", promptText || "");
 
-    // Add the image buffer directly instead of a file stream
-    const filename = `image_${Date.now()}.jpg`;
-    formData.append("image", imageBuffer, { filename });
+    // Get file extension from URL
+    const urlPath = new URL(imageUrl).pathname;
+    const extension = path.extname(urlPath) || ".jpg";
+
+    // Create unique filename
+    const filename = `image_${Date.now()}${extension}`;
+
+    // Properly append the image with filename and content type
+    formData.append("image", imageBuffer, {
+      filename: filename,
+      contentType: `image/${extension.substring(1)}` || "image/jpeg",
+    });
+
     formData.append("owner_id", OWNER_ID);
 
     // Upload image to /arts/ endpoint
@@ -179,18 +193,22 @@ async function uploadArtToAPI(
       headers: {
         ...formData.getHeaders(),
       },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
     });
 
     const artId = response.data.id;
 
     // If we have metadata, upload it separately
     if (negPromptText || comments || upvotes) {
-      await axios.post(`${API_URL}/art_metadata/`, {
-        art_id: artId,
-        neg_prompt_text: negPromptText || "",
-        comments: comments || "",
-        upvotes: upvotes || 0,
-      });
+      // Send parameters as query parameters instead of form data
+      await axios.post(
+        `${API_URL}/art_metadata/?` +
+          `art_id=${artId}&` +
+          `neg_prompt_text=${encodeURIComponent(negPromptText || "")}&` +
+          `comments=${encodeURIComponent(comments || "")}&` +
+          `upvotes=${upvotes || 0}`
+      );
     }
 
     console.log(`Successfully uploaded art ID: ${artId}`);
@@ -198,22 +216,50 @@ async function uploadArtToAPI(
   } catch (error) {
     console.error(`Error uploading art: ${error.message}`);
     if (error.response) {
-      console.error(`Server response: ${JSON.stringify(error.response.data)}`);
+      console.error(`Status: ${error.response.status}`);
+      console.error(`Headers:`, error.response.headers);
+      try {
+        console.error(
+          `Data:`,
+          typeof error.response.data === "object"
+            ? JSON.stringify(error.response.data)
+            : error.response.data
+        );
+      } catch (e) {
+        console.error("Cannot stringify response data");
+      }
     }
     return null;
   }
 }
 
-// Update the safeWheel function
+// Function to perform smooth scrolling with randomization
+async function smoothScroll(page, deltaY, step = 100, delayMs = 50) {
+  const steps = Math.abs(deltaY) / step;
+  const direction = deltaY > 0 ? 1 : -1;
+
+  for (let i = 0; i < steps; i++) {
+    // Introduce randomization in step size and delay
+    const randomStep = step + Math.floor(Math.random() * 20 - 10); // Random step variation
+    const randomDelay = delayMs + Math.floor(Math.random() * 20 - 10); // Random delay variation
+
+    await page.mouse.wheel({ deltaY: direction * randomStep });
+    await delay(randomDelay);
+  }
+}
+
+// Update the safeWheel function to use smoothScroll
 async function safeWheel(page, options) {
   try {
-    await page.mouse.wheel(options);
+    console.log("scrolling...");
+    await smoothScroll(page, options.deltaY);
   } catch (error) {
-    console.error("Error scrolling:", error);
-    // Try an alternative scroll method
-    await page.evaluate(() => {
-      window.scrollBy(0, 1000);
-    });
+    if (error instanceof puppeteer.errors.ProtocolError) {
+      console.log("Timeout occurred, retrying...");
+      await safeWheel(page, options);
+    } else {
+      throw error;
+    }
   }
 }
 
@@ -251,7 +297,7 @@ async function main() {
   console.log(`Starting with proxy: ${initialProxy.split(":")[0]}`);
 
   // Set up browser with the initial proxy
-  let { browser, page, pageForList, pageForLink } = await setupBrowserWithProxy(
+  let { browser, pageForList, pageForLink } = await setupBrowserWithProxy(
     initialProxy
   );
 
@@ -316,7 +362,6 @@ async function main() {
 
             // Update references
             browser = newBrowserSetup.browser;
-            page = newBrowserSetup.page;
             pageForList = newBrowserSetup.pageForList;
             pageForLink = newBrowserSetup.pageForLink;
 
@@ -477,6 +522,7 @@ async function main() {
 
         // Updated scroll approach
         try {
+          console.log("pageForList", pageForList);
           await safeWheel(pageForList, { deltaY: 1000 });
         } catch (error) {
           console.error("Error scrolling:", error);
@@ -485,6 +531,7 @@ async function main() {
             window.scrollBy(0, 1000);
           });
         }
+        console.log("success");
 
         // Improved link extraction with additional validation
         let currentLinks = await pageForList.evaluate(() => {

@@ -9,3 +9,8 @@ python-dotenv
 pillow 
 psycopg2
 openai
+chromadb>=0.4.22
+Pillow>=10.0.0
+transformers
+torch
+torchvision
