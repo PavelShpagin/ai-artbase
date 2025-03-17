@@ -31,6 +31,8 @@ import PurpleButton from "./Buttons";
 import { useNavigate } from "react-router-dom";
 import SignInModal from "./SignInModal";
 import { useUser } from "../contexts/UserContext";
+import { FaSignInAlt } from "react-icons/fa";
+import { MdFileUpload } from "react-icons/md";
 
 const UserMenu = ({ onSignOut }) => {
   const navigate = useNavigate();
@@ -126,8 +128,11 @@ const Header = ({ onUploadClick, onSearchChange }) => {
         gap={10}
       >
         <Link href="/" _hover={{ textDecoration: "none" }}>
-          <Box>
+          <Box display={{ base: "none", md: "flex" }}>
             <div className="ai-artbase-logo">Ai ArtBase</div>
+          </Box>
+          <Box display={{ base: "flex", md: "none" }}>
+            <div className="ai-artbase-logo">A</div>
           </Box>
         </Link>
 
@@ -159,12 +164,34 @@ const Header = ({ onUploadClick, onSearchChange }) => {
           {localStorage.getItem("token") ? (
             user && (
               <>
-                <PurpleButton name="Upload" onClick={onUploadClick} />
+                <Box display={{ base: "none", md: "flex" }}>
+                  <PurpleButton name="Upload" onClick={onUploadClick} />
+                </Box>
+                <Box display={{ base: "flex", md: "none" }} px={1}>
+                  <PurpleButton
+                    name={<MdFileUpload />}
+                    onClick={onUploadClick}
+                    px={2}
+                    py={1}
+                  />
+                </Box>
                 <UserMenu user={user} setUser={setUser} />
               </>
             )
           ) : (
-            <PurpleButton name="Sign In" onClick={handleSignInClick} />
+            <>
+              <Box display={{ base: "none", md: "flex" }}>
+                <PurpleButton name="Sign In" onClick={handleSignInClick} />
+              </Box>
+              <Box display={{ base: "flex", md: "none" }} px={1}>
+                <PurpleButton
+                  name={<FaSignInAlt />}
+                  onClick={handleSignInClick}
+                  px={2}
+                  py={1}
+                />
+              </Box>
+            </>
           )}
         </Flex>
       </Flex>

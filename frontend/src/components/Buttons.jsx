@@ -1,7 +1,7 @@
 import React from "react";
 import { Button, Box } from "@chakra-ui/react";
 
-const PurpleButton = ({ name, onClick, w, loading }) => {
+const PurpleButton = ({ name, onClick, w, loading, px = 8, py = 4 }) => {
   return (
     <Button
       isDisabled={loading}
@@ -10,8 +10,8 @@ const PurpleButton = ({ name, onClick, w, loading }) => {
       bgGradient="linear(to-r, purple.600, purple.400)"
       color="white"
       borderRadius="full"
-      px={8}
-      py={4}
+      px={px}
+      py={py}
       fontSize="md"
       fontWeight="bold"
       shadow="md"

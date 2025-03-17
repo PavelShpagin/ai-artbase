@@ -66,7 +66,7 @@ const ArtGallery = ({ arts }) => {
         top,
         width: photo.width,
         height: photo.height,
-        background: "#f0f0f0", // Lighter gray background placeholder
+        background: "rgb(229 231 235)", // Tailwind gray.200 color
         borderRadius: "8px",
         overflow: "hidden",
       }}
@@ -125,7 +125,7 @@ const ArtGallery = ({ arts }) => {
           py={4}
           width="100%"
         >
-          <Spinner size="md" thickness="4px" color="gray.300" />
+          <Spinner size="md" thickness="4px" color="gray.200" />
         </Box>
       )}
     </>

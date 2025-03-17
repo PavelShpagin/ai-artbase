@@ -1,11 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Pacifico&display=swap");
 
 :root {
-    --font-primary: 'Pacifico', cursive;
-    --color-primary: #7426EF;
-    --color-secondary: #00C3CC;
-    --gradient-primary: linear-gradient(to bottom, var(--color-secondary), var(--color-primary));
-    --box-shadow: 1px 2px 9px rgba(0, 0, 0, 0.12);
+  --font-primary: "Pacifico", cursive;
+  --color-primary: #7426ef;
+  --color-secondary: #00c3cc;
+  --gradient-primary: linear-gradient(
+    to bottom,
+    var(--color-secondary),
+    var(--color-primary)
+  );
+  --box-shadow: 1px 2px 9px rgba(0, 0, 0, 0.12);
 }
 
 body,
@@ -13,44 +17,48 @@ h1,
 h2,
 h3,
 p {
-    margin: 0;
-    padding: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .header {
-    position: fixed;
-    top: 0;
-    width: 100%;
-    z-index: 1000;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    border-bottom: 1px solid #E2E8F0;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 1000;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .ai-artbase-logo {
-    font-family: var(--font-primary);
-    font-size: 36px;
-    color: transparent;
-    background-image: var(--gradient-primary);
-    -webkit-background-clip: text;
-    background-clip: text;
-    display: inline-block;
+  font-family: var(--font-primary);
+  color: transparent;
+  background-image: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  display: inline-block;
+  font-size: 36px;
+  white-space: nowrap;
+  line-height: 1;
+  transform-origin: left;
+  padding-right: 10px;
 }
 
-
 .react-photo-gallery--gallery img {
-    cursor: pointer;
-    border-radius: 15px;
-    transition: filter 0.5s ease;
+  cursor: pointer;
 }
 
 .react-photo-gallery--gallery img:hover {
-    filter: brightness(75%);
+  filter: brightness(90%);
 }
 
 .react-photo-gallery--gallery {
-    padding-top: 10;
+  padding-top: 5px;
 }
 
 .gallery {
-    padding-top: 20px;
+  padding-top: 0px;
+  padding-left: 20px;
+  padding-right: 15px;
 }
