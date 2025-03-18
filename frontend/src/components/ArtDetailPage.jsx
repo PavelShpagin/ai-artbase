@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   VStack,
   Image,
@@ -14,11 +14,23 @@ import { useQuery } from "@tanstack/react-query";
 import ArtGallery from "./ArtGallery";
 import fetchAPI from "../services/api";
 
-const ArtDetailPage = () => {
+const ArtDetailPage = ({ searchQuery }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const art = location.state?.photo;
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const prevSearchQueryRef = useRef(searchQuery);
+
+  // Add effect to navigate back when search query changes
+  useEffect(() => {
+    // Only navigate if searchQuery has changed since last render
+    if (prevSearchQueryRef.current !== searchQuery) {
+      navigate("/", { replace: true });
+    }
+
+    // Update the ref for the next render
+    prevSearchQueryRef.current = searchQuery;
+  }, [searchQuery, navigate]);
 
   const { data: otherArts = [], isLoading } = useQuery({
     queryKey: ["similarArts", art?.id],
@@ -36,7 +48,7 @@ const ArtDetailPage = () => {
     if (isOpen) {
       onClose();
     }
-  }, [location, isOpen, onClose]);
+  }, [location]);
 
   if (!art) return null;
 
@@ -55,16 +67,17 @@ const ArtDetailPage = () => {
           display="flex"
           alignItems="center"
           justifyContent="center"
-          height="80vh"
+          height={{ base: "50vh", md: "80vh" }}
           width="fit-content"
-          boxShadow="2xl"
-          cursor="zoom-in"
+          maxWidth="80vw"
         >
           <Image
             src={art.src}
             objectFit="cover"
             borderRadius="lg"
             maxHeight="100%"
+            boxShadow="2xl"
+            cursor="zoom-in"
             onClick={(e) => {
               e.stopPropagation(); // Prevents the VStack onClick from firing
               onOpen();
@@ -85,6 +98,9 @@ const ArtDetailPage = () => {
               e.stopPropagation(); // Prevents the VStack onClick from firing
               onClose();
             }}
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
           >
             <Image
               src={art.src}

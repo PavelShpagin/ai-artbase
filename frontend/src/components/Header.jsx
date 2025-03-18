@@ -94,7 +94,7 @@ const UserMenu = ({ onSignOut }) => {
   );
 };
 
-const Header = ({ onUploadClick, onSearchChange }) => {
+const Header = ({ onUploadClick, onSearchChange, searchQuery }) => {
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user, setUser } = useUser();
@@ -157,7 +157,8 @@ const Header = ({ onUploadClick, onSearchChange }) => {
             boxShadow="base"
             fontWeight="500"
             color="gray.600"
-            onKeyDown={onSearchChange}
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
           />
         </InputGroup>
         <Flex align="center" gap={2}>

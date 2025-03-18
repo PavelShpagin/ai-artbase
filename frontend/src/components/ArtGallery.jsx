@@ -50,8 +50,16 @@ const ArtGallery = ({ arts }) => {
 
   const handleClick = (event, { photo }) => {
     event.stopPropagation(); // Prevent event bubbling
-    navigate(`/art/${photo.id}`, {
-      state: { photo },
+
+    // Save current scroll position to location state instead of sessionStorage
+    const scrollPosition = window.pageYOffset;
+
+    navigate(`/${photo.id}`, {
+      state: {
+        photo,
+        returnToPosition: true,
+        scrollPosition: scrollPosition,
+      },
       replace: false, // Ensure we push to history stack
     });
   };
@@ -113,6 +121,12 @@ const ArtGallery = ({ arts }) => {
           <Gallery
             photos={processedArts}
             direction={"column"}
+            columns={(containerWidth) => {
+              if (containerWidth >= 1280) return 5; // xl
+              if (containerWidth >= 1024) return 4; // lg
+              if (containerWidth >= 512) return 3; // md
+              return 2; // default
+            }}
             onClick={handleClick}
             renderImage={imageRenderer}
           />

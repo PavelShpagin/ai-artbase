@@ -26,9 +26,12 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    if (!pathname.startsWith("/#back")) {
+      window.scrollTo(0, 0);
+    }
   }, [pathname]);
 
   return null;
@@ -60,6 +63,10 @@ function App() {
     document.getElementById("file-upload").click();
   };
 
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+  };
+
   return (
     <PersistQueryClientProvider
       client={queryClient}
@@ -77,11 +84,8 @@ function App() {
               />
               <Header
                 onUploadClick={handleUploadClick}
-                onSearchChange={(e) => {
-                  if (e.key === "Enter") {
-                    setSearchQuery(e.target.value);
-                  }
-                }}
+                onSearchChange={handleSearchChange}
+                searchQuery={searchQuery}
               />
               <ImageUploadModal />
 
@@ -92,7 +96,10 @@ function App() {
                     path="/"
                     element={<MainGallery searchQuery={searchQuery} />}
                   />
-                  <Route path="/art/:id" element={<ArtDetailPage />} />
+                  <Route
+                    path="/:id"
+                    element={<ArtDetailPage searchQuery={searchQuery} />}
+                  />
                   <Route path="/analytics" element={<AnalyticsPage />} />
                   <Route path="/admin" element={<AdminTab />} />
                   <Route path="/profile" element={<UserProfile />} />
