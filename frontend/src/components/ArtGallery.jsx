@@ -12,7 +12,7 @@ const ArtGallery = ({ arts }) => {
 
   // Initial load
   useEffect(() => {
-    window.scrollTo(0, 0);
+    //window.scrollTo(0, 0);
 
     if (arts && arts.length > 0) {
       setVisibleArts(arts.slice(0, ITEMS_PER_PAGE));
@@ -49,11 +49,11 @@ const ArtGallery = ({ arts }) => {
   }, [visibleArts, arts]);
 
   const handleClick = (event, { photo }) => {
-    window.scrollTo({
-      top: 0,
-      behavior: "instant",
+    event.stopPropagation(); // Prevent event bubbling
+    navigate(`/art/${photo.id}`, {
+      state: { photo },
+      replace: false, // Ensure we push to history stack
     });
-    navigate(`/art/${photo.id}`, { state: { photo } });
   };
 
   // Add custom image renderer for the gallery
@@ -86,6 +86,10 @@ const ArtGallery = ({ arts }) => {
           // Once loaded, ensure the image is visible
           e.target.style.opacity = 1;
         }}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClick(e, { photo });
+        }}
       />
     </div>
   );
@@ -102,12 +106,10 @@ const ArtGallery = ({ arts }) => {
         }))
       : [];
 
-  console.log(visibleArts);
-
   return (
     <>
       {processedArts.length > 0 && (
-        <div className="gallery">
+        <div className="gallery" onClick={(e) => e.stopPropagation()}>
           <Gallery
             photos={processedArts}
             direction={"column"}

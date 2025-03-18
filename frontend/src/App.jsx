@@ -20,7 +20,9 @@ import fetchAPI from "./services/api";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import theme from "./theme";
 import "./App.css";
-//import Gallery from "react-photo-gallery";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -32,6 +34,25 @@ const ScrollToTop = () => {
   return null;
 };
 
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes as default stale time
+      cacheTime: 10 * 60 * 1000, // 10 minutes as default cache time
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+    },
+  },
+});
+
+// Create a persisters
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: "art-gallery-cache", // unique key for localStorage
+  throttleTime: 1000, // don't write to localStorage more than once per second
+});
+
 function App() {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -40,38 +61,48 @@ function App() {
   };
 
   return (
-    <GoogleOAuthProvider clientId={import.meta.env.VITE_CLIENT_ID}>
-      <Router>
-        <ChakraProvider theme={theme}>
-          <UserProvider>
-            <ColorModeScript initialColorMode={theme.config.initialColorMode} />
-            <Header
-              onUploadClick={handleUploadClick}
-              onSearchChange={(e) => {
-                if (e.key === "Enter") {
-                  setSearchQuery(e.target.value);
-                }
-              }}
-            />
-            <ImageUploadModal />
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+      onSuccess={() => {
+        console.log("Cache restored from localStorage");
+      }}
+    >
+      <GoogleOAuthProvider clientId={import.meta.env.VITE_CLIENT_ID}>
+        <Router>
+          <ChakraProvider theme={theme}>
+            <UserProvider>
+              <ColorModeScript
+                initialColorMode={theme.config.initialColorMode}
+              />
+              <Header
+                onUploadClick={handleUploadClick}
+                onSearchChange={(e) => {
+                  if (e.key === "Enter") {
+                    setSearchQuery(e.target.value);
+                  }
+                }}
+              />
+              <ImageUploadModal />
 
-            <Box pt={84}>
-              <ScrollToTop />
-              <Routes>
-                <Route
-                  path="/"
-                  element={<MainGallery searchQuery={searchQuery} />}
-                />
-                <Route path="/art/:id" element={<ArtDetailPage />} />
-                <Route path="/analytics" element={<AnalyticsPage />} />
-                <Route path="/admin" element={<AdminTab />} />
-                <Route path="/profile" element={<UserProfile />} />
-              </Routes>
-            </Box>
-          </UserProvider>
-        </ChakraProvider>
-      </Router>
-    </GoogleOAuthProvider>
+              <Box pt={84}>
+                <ScrollToTop />
+                <Routes>
+                  <Route
+                    path="/"
+                    element={<MainGallery searchQuery={searchQuery} />}
+                  />
+                  <Route path="/art/:id" element={<ArtDetailPage />} />
+                  <Route path="/analytics" element={<AnalyticsPage />} />
+                  <Route path="/admin" element={<AdminTab />} />
+                  <Route path="/profile" element={<UserProfile />} />
+                </Routes>
+              </Box>
+            </UserProvider>
+          </ChakraProvider>
+        </Router>
+      </GoogleOAuthProvider>
+    </PersistQueryClientProvider>
   );
 }
 

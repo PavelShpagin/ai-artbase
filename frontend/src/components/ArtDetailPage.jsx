@@ -7,55 +7,57 @@ import {
   ModalOverlay,
   ModalContent,
   useDisclosure,
+  Spinner,
 } from "@chakra-ui/react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import ArtGallery from "./ArtGallery";
 import fetchAPI from "../services/api";
 
 const ArtDetailPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const art = location.state?.photo;
-  const [otherArts, setOtherArts] = useState([]);
   const { isOpen, onOpen, onClose } = useDisclosure();
 
-  useEffect(() => {
-    if (!art) {
-      return;
-    }
-
-    const fetchArts = async () => {
-      const endpoint = "/arts/";
-      try {
-        const response = await fetchAPI(endpoint);
-        const filteredArts = response.filter((image) => image.id !== art.id);
-        console.log(filteredArts);
-        setOtherArts(filteredArts);
-      } catch (error) {
-        console.log("There was an issue fetching arts.");
-      }
-    };
-
-    fetchArts();
-  }, [art.id]);
+  const { data: otherArts = [], isLoading } = useQuery({
+    queryKey: ["similarArts", art?.id],
+    queryFn: async () => {
+      if (!art) return [];
+      const endpoint = `/arts/similar/${art.id}`;
+      const response = await fetchAPI(endpoint);
+      return response.filter((image) => image.id !== art.id);
+    },
+    enabled: !!art,
+    staleTime: 60 * 1000, // 1 minute
+  });
 
   useEffect(() => {
     if (isOpen) {
       onClose();
     }
-  }, [location]);
+  }, [location, isOpen, onClose]);
+
+  if (!art) return null;
 
   return (
     <>
-      <VStack spacing={8} align="center" paddingTop="10px" paddingBottom="20px">
+      <VStack
+        spacing={8}
+        align="center"
+        paddingTop="10px"
+        paddingBottom="20px"
+        onClick={() => navigate(-1)}
+        cursor="pointer"
+      >
         <Box
           bg="gray.150"
           display="flex"
           alignItems="center"
           justifyContent="center"
-          height="780px"
+          height="80vh"
           width="fit-content"
           boxShadow="2xl"
-          onClick={onOpen}
           cursor="zoom-in"
         >
           <Image
@@ -63,11 +65,27 @@ const ArtDetailPage = () => {
             objectFit="cover"
             borderRadius="lg"
             maxHeight="100%"
+            onClick={(e) => {
+              e.stopPropagation(); // Prevents the VStack onClick from firing
+              onOpen();
+            }}
           />
         </Box>
-        <Modal isOpen={isOpen} onClose={onClose} size="full" isCentered>
+        <Modal
+          isOpen={isOpen}
+          onClose={onClose}
+          size="full"
+          cursor="pointer"
+          isCentered
+        >
           <ModalOverlay />
-          <ModalContent cursor="zoom-out" onClick={onClose}>
+          <ModalContent
+            cursor="zoom-out"
+            onClick={(e) => {
+              e.stopPropagation(); // Prevents the VStack onClick from firing
+              onClose();
+            }}
+          >
             <Image
               src={art.src}
               objectFit="contain"
@@ -77,7 +95,13 @@ const ArtDetailPage = () => {
           </ModalContent>
         </Modal>
       </VStack>
-      <ArtGallery arts={otherArts} />
+      {isLoading ? (
+        <Box display="flex" justifyContent="center" py={4} width="100%">
+          <Spinner size="md" thickness="4px" color="gray.200" />
+        </Box>
+      ) : (
+        <ArtGallery arts={otherArts} />
+      )}
     </>
   );
 };
