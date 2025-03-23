@@ -1,54 +1,63 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   VStack,
-  Image,
   Box,
   Modal,
   ModalOverlay,
   ModalContent,
   useDisclosure,
-  Spinner,
 } from "@chakra-ui/react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import ArtGallery from "./ArtGallery";
 import fetchAPI from "../services/api";
+import { useSearchQuery } from "../App";
+import OptimizedImage from "./OptimizedImage";
+import { Spinner } from "@chakra-ui/react";
 
-const ArtDetailPage = ({ searchQuery }) => {
+const ArtDetailPage = () => {
+  const { searchQuery } = useSearchQuery();
   const location = useLocation();
   const navigate = useNavigate();
+  const router = useRouter();
   const art = location.state?.photo;
   const { isOpen, onOpen, onClose } = useDisclosure();
   const prevSearchQueryRef = useRef(searchQuery);
 
-  // Add effect to navigate back when search query changes
+  // Navigate back when search query changes
   useEffect(() => {
-    // Only navigate if searchQuery has changed since last render
     if (prevSearchQueryRef.current !== searchQuery) {
       navigate("/", { replace: true });
     }
-
-    // Update the ref for the next render
     prevSearchQueryRef.current = searchQuery;
   }, [searchQuery, navigate]);
 
-  const { data: otherArts = [], isLoading } = useQuery({
-    queryKey: ["similarArts", art?.id],
+  // Fetch similar arts
+  const { data: similarArts, isLoading } = useQuery({
+    queryKey: ["similar", art?.id],
     queryFn: async () => {
-      if (!art) return [];
       const endpoint = `/arts/similar/${art.id}`;
       const response = await fetchAPI(endpoint);
-      return response.filter((image) => image.id !== art.id);
+      const filteredResponse = response.filter((image) => image.id !== art.id);
+      console.log("!filteredResponse", filteredResponse);
+      return filteredResponse;
     },
-    enabled: !!art,
-    staleTime: 60 * 1000, // 1 minute
+    enabled: !!art?.id,
+    staleTime: Infinity, // 5 minutes
+    cacheTime: Infinity, // 10 minutes
   });
 
+  // Close modal when location changes
   useEffect(() => {
     if (isOpen) {
       onClose();
     }
   }, [location]);
+
+  // Function to go back
+  const goBack = () => {
+    router.history.back();
+  };
 
   if (!art) return null;
 
@@ -59,7 +68,7 @@ const ArtDetailPage = ({ searchQuery }) => {
         align="center"
         paddingTop="10px"
         paddingBottom="20px"
-        onClick={() => navigate(-1)}
+        onClick={goBack}
         cursor="pointer"
       >
         <Box
@@ -71,7 +80,7 @@ const ArtDetailPage = ({ searchQuery }) => {
           width="fit-content"
           maxWidth="80vw"
         >
-          <Image
+          <OptimizedImage
             src={art.src}
             objectFit="cover"
             borderRadius="lg"
@@ -116,7 +125,7 @@ const ArtDetailPage = ({ searchQuery }) => {
           <Spinner size="md" thickness="4px" color="gray.200" />
         </Box>
       ) : (
-        <ArtGallery arts={otherArts} />
+        <ArtGallery arts={similarArts} />
       )}
     </>
   );

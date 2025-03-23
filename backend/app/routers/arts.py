@@ -11,6 +11,8 @@ from ..chroma_services import *
 from ..config import *
 from ..utils import *
 from ..r2_storage import upload_image_to_r2
+from ..chroma_services import collection_prompts
+import numpy as np
 
 router = APIRouter()
 
@@ -65,7 +67,7 @@ async def read_arts(limit: int = 1000, db: Session = Depends(get_db)):
 async def search_arts(query: str, db: Session = Depends(get_db)):
     results = collection_prompts.query(query_texts=[query], include=["distances"])  
     print(results)
-    filtered_ids = filter_chroma(results, 0.4)
+    filtered_ids = results['ids'][0]# filter_chroma(results, 0.4)
     
     if not filtered_ids:
         return []
@@ -86,3 +88,40 @@ def get_user_arts(user_id: int, db: Session = Depends(get_db)):
     if not arts:
         raise HTTPException(status_code=404, detail="No arts found for this user.")
     return arts
+
+@router.get("/arts/similar/{art_id}", response_model=List[schemas.Art])
+async def get_similar_arts(art_id: int, db: Session = Depends(get_db)):
+    """Get semantically similar arts based on prompt embedding"""
+    # Fetch the source art
+    source_art = db.query(models.Art).filter(models.Art.id == art_id).first()
+    if not source_art:
+        raise HTTPException(status_code=404, detail="Art not found")
+    
+    # Get the prompt from the source art
+    prompt = source_art.prompt
+    if not prompt:
+        # If no prompt, return random arts
+        arts = db.query(models.Art).filter(models.Art.id != art_id).limit(20).all()
+        return arts
+    
+    # Query ChromaDB for similar prompts
+    try:
+        results = collection_prompts.query(
+            query_texts=[prompt],
+            n_results=50,
+            include=["documents", "distances", "metadatas"]
+        )
+        
+        similar_ids = results['ids'][0]
+        similar_arts = db.query(models.Art)\
+            .filter(models.Art.id.in_(similar_ids))\
+            .all()
+            
+        return similar_arts
+      
+    
+    except Exception as e:
+        # Fallback to random arts if ChromaDB query fails
+        print(f"ChromaDB query failed: {str(e)}")
+        arts = db.query(models.Art).filter(models.Art.id != art_id).limit(20).all()
+        return arts
