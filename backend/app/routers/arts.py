@@ -125,3 +125,11 @@ async def get_similar_arts(art_id: int, db: Session = Depends(get_db)):
         print(f"ChromaDB query failed: {str(e)}")
         arts = db.query(models.Art).filter(models.Art.id != art_id).limit(20).all()
         return arts
+
+@router.get("/arts/id/{art_id}", response_model=schemas.Art)
+async def get_art_by_id(art_id: int, db: Session = Depends(get_db)):
+    art = db.query(models.Art).filter(models.Art.id == art_id).first()
+    if not art:
+        raise HTTPException(status_code=404, detail="Art not found")
+    return art
+    
