@@ -85,17 +85,13 @@
 // // // export default App;
 
 import React, { createContext, useState, useContext } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { ChakraProvider, Box, ColorModeScript } from "@chakra-ui/react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
 import UserProvider from "./contexts/UserContext";
 import Header from "./components/Header";
 import ImageUploadModal from "./components/ImageUploadModal";
@@ -106,7 +102,6 @@ import theme from "./theme";
 import "./App.css";
 import ArtDetailPage from "./components/ArtDetailPage";
 import MainGallery from "./components/MainGallery";
-import { Outlet } from "@tanstack/react-router";
 
 // Create a context to share the search query across routes
 const SearchQueryContext = createContext();
@@ -139,86 +134,36 @@ const persister = createSyncStoragePersister({
   throttleTime: 1000, // don't write to localStorage more than once per second
 });
 
-// Define routes using TanStack Router
-const rootRoute = createRootRoute({
-  component: () => (
-    <div>
-      <Header />
-      <ImageUploadModal />
-      <Box pt={84}>
-        <Outlet />
-      </Box>
-    </div>
-  ),
-});
-
-const mainGalleryRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  component: MainGallery,
-});
-
-const artDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/$id",
-  component: ArtDetailPage,
-});
-
-const analyticsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/analytics",
-  component: AnalyticsPage,
-});
-
-const adminRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/admin",
-  component: AdminTab,
-});
-
-const profileRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/profile",
-  component: UserProfile,
-});
-
-// Create router
-const router = createRouter({
-  routeTree: rootRoute.addChildren([
-    mainGalleryRoute,
-    artDetailRoute,
-    analyticsRoute,
-    adminRoute,
-    profileRoute,
-  ]),
-  // scrollRestoration: true,
-});
-
 function App() {
   return (
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={{ persister }}
-      onSuccess={() => {
-        console.log("Cache restored from localStorage");
-      }}
-    >
+    <QueryClientProvider client={queryClient}>
       <GoogleOAuthProvider clientId={import.meta.env.VITE_CLIENT_ID}>
         <ChakraProvider theme={theme}>
           <UserProvider>
             <ColorModeScript initialColorMode={theme.config.initialColorMode} />
             <SearchQueryProvider>
-              <RouterProvider router={router} />
+              <Router>
+                <Header />
+                <ImageUploadModal />
+                <Box pt={84}>
+                  <Routes>
+                    <Route path="/" element={<MainGallery />} />
+                    <Route path="/:id" element={<ArtDetailPage />} />
+                    <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/admin" element={<AdminTab />} />
+                    <Route path="/profile" element={<UserProfile />} />
+                  </Routes>
+                </Box>
+              </Router>
             </SearchQueryProvider>
           </UserProvider>
         </ChakraProvider>
       </GoogleOAuthProvider>
-    </PersistQueryClientProvider>
+    </QueryClientProvider>
   );
 }
 
 export default App;
-
 // import React, {
 //   useState,
 //   createContext,

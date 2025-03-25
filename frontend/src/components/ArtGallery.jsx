@@ -1,113 +1,105 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import Gallery from "react-photo-gallery";
-import { useNavigate, useLocation } from "@tanstack/react-router";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Box } from "@mui/material";
 import { Spinner } from "@chakra-ui/react";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
 
-const ArtGallery = ({ arts }) => {
+export const ArtGallery = ({ isReady }) => {
   const navigate = useNavigate();
   const loaderRef = useRef(null);
   const galleryRef = useRef(null);
+  const boxRef = useRef(null);
+  const [isCleaning, setIsCleaning] = useState(false);
   const location = useLocation();
   const { searchQuery, setSearchQuery } = useSearchQuery();
   const ITEMS_PER_PAGE = 5;
 
-  // Retrieve the page number and visible arts from the cache
-  const [page, setPage] = useState(() => {
-    if (location.pathname === "/") {
-      return parseInt(
-        sessionStorage.getItem(`page-/${searchQuery}`) || "1",
-        10
-      );
-    } else {
-      return parseInt(
-        sessionStorage.getItem(`page-${location.pathname}`) || "1",
-        10
-      );
-    }
-  });
-
-  const [scrollPosition, setScrollPosition] = useState(() => {
-    if (location.pathname === "/") {
-      return parseInt(
-        sessionStorage.getItem(`scrollPosition-/${searchQuery}`) || "0",
-        10
-      );
-    } else {
-      return parseInt(
-        sessionStorage.getItem(`scrollPosition-${location.pathname}`) || "0",
-        10
-      );
-    }
-  });
-
-  const [layoutHeight, setLayoutHeight] = useState(() => {
-    if (location.pathname === "/") {
-      return parseInt(
-        sessionStorage.getItem(`layoutHeight-/${searchQuery}`) || "0",
-        10
-      );
-    } else {
-      return parseInt(
-        sessionStorage.getItem(`layoutHeight-${location.pathname}`) || "0",
-        10
-      );
-    }
-  });
-
-  const [visibleArts, setVisibleArts] = useState(() => {
-    if (location.pathname === "/") {
-      return JSON.parse(
-        sessionStorage.getItem(`visibleArts-/${searchQuery}`) || "[]"
-      );
-    } else {
-      return JSON.parse(
-        sessionStorage.getItem(`visibleArts-${location.pathname}`) || "[]"
-      );
-    }
-  });
-
+  const [page, setPage] = useState(0);
+  const [scrollPosition, setScrollPosition] = useState(0);
+  const [layoutHeight, setLayoutHeight] = useState(0);
+  const [visibleArts, setVisibleArts] = useState([]);
+  const [arts, setArts] = useState([]);
   const [galleryReady, setGalleryReady] = useState(false);
 
+  useLayoutEffect(() => {
+    if (!isReady) {
+      console.log("cleaning");
+      setIsCleaning(true);
+      window.removeEventListener("scroll", handleScroll);
+      setArts([]);
+      setGalleryReady(false);
+      setPage(0);
+      setVisibleArts([]);
+      setLayoutHeight(0);
+      setScrollPosition(0);
+      setIsCleaning(false);
+    }
+  }, [isReady]);
+
+  // Separate setup effect
+  useLayoutEffect(() => {
+    if (!isReady) return; // Early return if not ready
+    console.log("loading");
+    const currentPath =
+      location.pathname === "/"
+        ? `main-${searchQuery}`
+        : `detail-${location.pathname}`;
+
+    // const storedHeight = Number(
+    //   sessionStorage.getItem(`layoutHeight-${currentPath}`)
+    // );
+    const storedArts = JSON.parse(
+      sessionStorage.getItem(`arts-${currentPath}`)
+    );
+
+    if (storedArts) {
+      //setLayoutHeight(storedHeight);
+      setArts(storedArts);
+    }
+  }, [isReady, location.pathname, searchQuery]);
+
+  console.log("visibleArts", visibleArts.length);
   useEffect(() => {
-    if (galleryReady) {
-      const firstPageImages = arts.slice(0, page * ITEMS_PER_PAGE);
-
-      // Make sure we store valid data for Gallery component
-      const imageData = firstPageImages.map((img) => ({
-        id: img.id,
-        src: img.src,
-        width: parseFloat(img.width) || 1,
-        height: parseFloat(img.height) || 1,
-        alt: img.title || "Gallery image",
-        title: img.title || "Untitled",
-      }));
-
-      if (location.pathname === "/") {
-        sessionStorage.setItem(`page-/${searchQuery}`, page.toString());
-        sessionStorage.setItem(
-          `visibleArts-/${searchQuery}`,
-          JSON.stringify(imageData)
-        );
-      } else {
-        sessionStorage.setItem(`page-${location.pathname}`, page.toString());
-        sessionStorage.setItem(
-          `visibleArts-${location.pathname}`,
-          JSON.stringify(imageData)
-        );
-      }
-      setVisibleArts(imageData);
-
+    if (!loaderRef.current) return;
+    if (galleryReady && !isCleaning && arts && arts.length > 0) {
+      console.log("setting up observer");
       const observer = new IntersectionObserver(
         (entries) => {
           if (
             entries[0].isIntersecting &&
             arts &&
-            arts.length > page * ITEMS_PER_PAGE
+            arts.length > page * ITEMS_PER_PAGE &&
+            !isCleaning
           ) {
+            console.log("triggering");
             setTimeout(() => {
+              const firstPageImages = arts.slice(
+                0,
+                (page + 1) * ITEMS_PER_PAGE
+              );
+              const imageData = firstPageImages.map((img) => ({
+                id: img.id,
+                src: img.src,
+                width: parseFloat(img.width) || 1,
+                height: parseFloat(img.height) || 1,
+                alt: img.title || "Gallery image",
+                title: img.title || "Untitled",
+              }));
+
+              console.log("imageData", imageData.length);
+
+              const pathKey =
+                location.pathname === "/"
+                  ? `main-${searchQuery}`
+                  : `detail-${location.pathname}`;
+              sessionStorage.setItem(`page-${pathKey}`, page.toString());
+              sessionStorage.setItem(
+                `visibleArts-${pathKey}`,
+                JSON.stringify(imageData)
+              );
+              setVisibleArts(imageData);
               setPage((prev) => prev + 1);
             }, 300);
           }
@@ -121,27 +113,22 @@ const ArtGallery = ({ arts }) => {
 
       return () => observer.disconnect();
     }
-  }, [page, galleryReady]);
+  }, [galleryReady, location.pathname, loaderRef, page]);
 
   useLayoutEffect(() => {
-    console.log(
-      "TRYING",
-      arts,
-      visibleArts,
-      page,
-      layoutHeight,
-      !galleryReady,
-      location.pathname === "/"
-        ? !parseInt(sessionStorage.getItem(`page-/${searchQuery}`), 10)
-        : !parseInt(sessionStorage.getItem(`page-${location.pathname}`), 10)
-    );
     if (
       arts &&
       arts.length > 0 &&
+      !galleryReady &&
+      !isCleaning &&
       (location.pathname === "/"
-        ? !parseInt(sessionStorage.getItem(`page-/${searchQuery}`), 10)
-        : !parseInt(sessionStorage.getItem(`page-${location.pathname}`), 10))
+        ? !parseInt(sessionStorage.getItem(`page-${"main-" + searchQuery}`), 10)
+        : !parseInt(
+            sessionStorage.getItem(`page-${"detail-" + location.pathname}`),
+            10
+          ))
     ) {
+      console.log("creating new page");
       const firstPageImages = arts.slice(0, ITEMS_PER_PAGE);
       // Make sure we store valid data for Gallery component
       const imageData = firstPageImages.map((img) => ({
@@ -153,116 +140,167 @@ const ArtGallery = ({ arts }) => {
         title: img.title || "Untitled",
       }));
 
-      if (location.pathname === "/") {
-        sessionStorage.setItem(`page-/${searchQuery}`, "1");
-        sessionStorage.setItem(
-          `visibleArts-/${searchQuery}`,
-          JSON.stringify(imageData)
-        );
-      } else {
-        sessionStorage.setItem(`page-${location.pathname}`, "1");
-        sessionStorage.setItem(
-          `visibleArts-${location.pathname}`,
-          JSON.stringify(imageData)
-        );
-      }
+      const pathKey =
+        location.pathname === "/"
+          ? `main-${searchQuery}`
+          : `detail-${location.pathname}`;
+
+      sessionStorage.setItem(`page-${pathKey}`, "1");
+      sessionStorage.setItem(
+        `visibleArts-${pathKey}`,
+        JSON.stringify(imageData)
+      );
       setVisibleArts(imageData);
       setPage(1);
       setGalleryReady(true);
+
       return;
     }
     if (
       arts &&
       arts.length > 0 &&
-      visibleArts &&
-      page &&
+      (location.pathname === "/"
+        ? sessionStorage.getItem(`visibleArts-${"main-" + searchQuery}`) &&
+          sessionStorage.getItem(`page-${"main-" + searchQuery}`)
+        : sessionStorage.getItem(
+            `visibleArts-${"detail-" + location.pathname}`
+          ) &&
+          sessionStorage.getItem(`page-${"detail-" + location.pathname}`)) &&
       layoutHeight > 0 &&
-      !galleryReady
+      !galleryReady &&
+      !isCleaning &&
+      boxRef.current
     ) {
-      console.log("TRIGGERED");
+      console.log("restoring page");
       let position;
       if (location.pathname === "/") {
         position = parseInt(
-          sessionStorage.getItem(`scrollPosition-/${searchQuery}`) || "0",
+          sessionStorage.getItem(`scrollPosition-${"main-" + searchQuery}`),
           10
         );
       } else {
         position = parseInt(
-          sessionStorage.getItem(`scrollPosition-${location.pathname}`) || "0",
+          sessionStorage.getItem(
+            `scrollPosition-${"detail-" + location.pathname}`
+          ),
           10
         );
       }
+      console.log("!!!location.pathname", location.pathname);
       window.scrollTo(0, position);
+      if (location.pathname === "/") {
+        setVisibleArts(
+          JSON.parse(
+            sessionStorage.getItem(`visibleArts-${"main-" + searchQuery}`)
+          )
+        );
+        setPage(
+          parseInt(sessionStorage.getItem(`page-${"main-" + searchQuery}`), 10)
+        );
+      } else {
+        setVisibleArts(
+          JSON.parse(
+            sessionStorage.getItem(
+              `visibleArts-${"detail-" + location.pathname}`
+            )
+          )
+        );
+        setPage(
+          parseInt(
+            sessionStorage.getItem(`page-${"detail-" + location.pathname}`),
+            10
+          )
+        );
+      }
       setTimeout(() => {
         setGalleryReady(true);
       }, 50);
     }
-  }, [arts, visibleArts, page, layoutHeight, galleryReady]);
+  }, [
+    arts,
+    layoutHeight,
+    boxRef,
+    location.pathname,
+    isCleaning,
+    galleryReady,
+    galleryRef,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!galleryRef.current || isCleaning) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const galleryHeight = entries[0].target.scrollHeight;
+      const pathKey =
+        location.pathname === "/"
+          ? `main-${searchQuery}`
+          : `detail-${location.pathname}`;
+      sessionStorage.setItem(
+        `layoutHeight-${pathKey}`,
+        galleryHeight.toString()
+      );
+      setLayoutHeight(galleryHeight);
+    });
+
+    resizeObserver.observe(galleryRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [location.pathname, searchQuery, isCleaning]);
 
   const handleScroll = () => {
+    if (isCleaning) return;
     const currentPosition = window.scrollY;
+    console.log("currentPosition", currentPosition);
     if (location.pathname === "/") {
       sessionStorage.setItem(
-        `scrollPosition-/${searchQuery}`,
+        `scrollPosition-${"main-" + searchQuery}`,
         currentPosition.toString()
       );
     } else {
       sessionStorage.setItem(
-        `scrollPosition-${location.pathname}`,
+        `scrollPosition-${"detail-" + location.pathname}`,
         currentPosition.toString()
       );
     }
     // Store the current layout height when user scrolls
-    if (galleryRef.current) {
-      const galleryHeight = galleryRef.current.scrollHeight;
-      if (location.pathname === "/") {
-        sessionStorage.setItem(
-          `layoutHeight-/${searchQuery}`,
-          galleryHeight.toString()
-        );
-      } else {
-        sessionStorage.setItem(
-          `layoutHeight-${location.pathname}`,
-          galleryHeight.toString()
-        );
-      }
-      setLayoutHeight(galleryHeight);
-    }
+    // if (galleryRef.current) {
+    //   const galleryHeight = galleryRef.current.scrollHeight;
+    //   if (location.pathname === "/") {
+    //     sessionStorage.setItem(
+    //       `layoutHeight-${"main-" + searchQuery}`,
+    //       galleryHeight.toString()
+    //     );
+    //   } else {
+    //     sessionStorage.setItem(
+    //       `layoutHeight-${"detail-" + location.pathname}`,
+    //       galleryHeight.toString()
+    //     );
+    //   }
+    //   setLayoutHeight(galleryHeight);
+    // }
 
-    const currentState = window.history.state || {};
-    window.history.replaceState(
-      { ...currentState, scrollPosition: currentPosition },
-      document.title
-    );
+    // const currentState = window.history.state || {};
+    // window.history.replaceState(
+    //   { ...currentState, scrollPosition: currentPosition },
+    //   document.title
+    // );
   };
 
-  // Track scroll position and layout height
   useEffect(() => {
-    if (galleryReady) {
+    if (galleryReady && !isCleaning) {
       window.addEventListener("scroll", handleScroll);
     }
-
     return () => {
       window.removeEventListener("scroll", handleScroll);
     };
-  }, [galleryReady]);
+  }, [galleryReady, isCleaning]);
 
   // Handle navigation and save scroll position.
   const handleClick = (event, { photo }) => {
-    event.stopPropagation();
-    console.log("page-/photo.id", sessionStorage.getItem(`page-/${photo.id}`));
-    window.removeEventListener("scroll", handleScroll);
-    sessionStorage.setItem(`scrollPosition-/${photo.id}`, 0);
-    setScrollPosition(0);
-    setGalleryReady(false);
-    setPage(parseInt(sessionStorage.getItem(`page-/${photo.id}`) || "1", 10));
-    setVisibleArts(
-      JSON.parse(sessionStorage.getItem(`visibleArts-/${photo.id}`) || "[]")
-    );
-    setLayoutHeight(
-      parseInt(sessionStorage.getItem(`layoutHeight-/${photo.id}`) || "0", 10)
-    );
-    navigate({ to: `/${photo.id}`, state: { photo } });
+    sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
+    navigate(`/${photo.id}`, { state: { photo } });
   };
 
   // Custom renderer for images.
@@ -304,11 +342,16 @@ const ArtGallery = ({ arts }) => {
     </div>
   );
 
+  useEffect(() => {
+    console.log("page", page);
+  }, [page]);
+
   return (
     <>
       <div className="p-4" ref={galleryRef}>
         {!galleryReady && layoutHeight > 0 && (
           <div
+            ref={boxRef}
             style={{
               height: `${layoutHeight}px`,
               position: "absolute",
@@ -338,8 +381,9 @@ const ArtGallery = ({ arts }) => {
         )}
 
         {(!arts ||
-          !arts.response ||
-          visibleArts.length < arts.response.length) && (
+          !visibleArts ||
+          arts.length === 0 ||
+          visibleArts.length < arts.length) && (
           <Box
             ref={loaderRef}
             display="flex"
@@ -354,5 +398,3 @@ const ArtGallery = ({ arts }) => {
     </>
   );
 };
-
-export default ArtGallery;

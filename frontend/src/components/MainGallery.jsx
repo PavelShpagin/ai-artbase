@@ -1,44 +1,44 @@
-import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import ArtGallery from "./ArtGallery";
+import React, { useState, useEffect, useRef } from "react";
+import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
 import { useSearchQuery } from "../App";
 
 const MainGallery = () => {
   const { searchQuery } = useSearchQuery();
-  const [isSearching, setIsSearching] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
-  const { data: arts, isLoading } = useQuery({
-    queryKey: ["arts", searchQuery],
-    queryFn: async () => {
+  useEffect(() => {
+    setIsReady(false);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const fetchArts = async () => {
+      if (isReady) return;
       try {
-        setIsSearching(true);
+        if (sessionStorage.getItem(`arts-main-${searchQuery}`)) {
+          setIsReady(true);
+          return;
+        }
 
         const endpoint = searchQuery
           ? `/search/?query=${encodeURIComponent(searchQuery)}`
           : "/arts/";
 
         const response = await fetchAPI(endpoint);
-        return response;
+        sessionStorage.setItem(
+          `arts-main-${searchQuery}`,
+          JSON.stringify(response)
+        );
+        setIsReady(true);
       } catch (error) {
-        throw new Error("Failed to fetch arts: " + error.message);
-      } finally {
-        setIsSearching(false);
+        console.error("Failed to fetch arts: " + error.message);
       }
-    },
-    staleTime: Infinity, // 5 minutes
-    cacheTime: Infinity, // 10 minutes
-  });
+    };
 
-  return (
-    <>
-      {isLoading || isSearching ? (
-        <ArtGallery arts={[]} />
-      ) : (
-        <ArtGallery arts={arts} />
-      )}
-    </>
-  );
+    fetchArts();
+  }, [isReady]);
+
+  return <ArtGallery isReady={isReady} />;
 };
 
 export default MainGallery;

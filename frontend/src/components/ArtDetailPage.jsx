@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
 import {
   VStack,
   Box,
@@ -7,9 +7,9 @@ import {
   ModalContent,
   useDisclosure,
 } from "@chakra-ui/react";
-import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import ArtGallery from "./ArtGallery";
+import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
@@ -19,10 +19,21 @@ const ArtDetailPage = () => {
   const { searchQuery } = useSearchQuery();
   const location = useLocation();
   const navigate = useNavigate();
-  const router = useRouter();
-  const art = location.state?.photo;
+  const [art, setArt] = useState(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const prevSearchQueryRef = useRef(searchQuery);
+
+  const [isReady, setIsReady] = useState(false);
+
+  useLayoutEffect(() => {
+    if (location.state?.photo) {
+      setArt(location.state?.photo);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    setIsReady(false);
+  }, [location.pathname]);
 
   // Navigate back when search query changes
   useEffect(() => {
@@ -32,20 +43,51 @@ const ArtDetailPage = () => {
     prevSearchQueryRef.current = searchQuery;
   }, [searchQuery, navigate]);
 
-  // Fetch similar arts
-  const { data: similarArts, isLoading } = useQuery({
-    queryKey: ["similar", art?.id],
-    queryFn: async () => {
-      const endpoint = `/arts/similar/${art.id}`;
-      const response = await fetchAPI(endpoint);
-      const filteredResponse = response.filter((image) => image.id !== art.id);
-      console.log("!filteredResponse", filteredResponse);
-      return filteredResponse;
-    },
-    enabled: !!art?.id,
-    staleTime: Infinity, // 5 minutes
-    cacheTime: Infinity, // 10 minutes
-  });
+  useEffect(() => {
+    const fetchSimilarArts = async () => {
+      if (isReady) return;
+      try {
+        const endpoint = `/arts/similar${location.pathname}`;
+        console.log(endpoint);
+        if (!sessionStorage.getItem(`arts-detail-${location.pathname}`)) {
+          const response = await fetchAPI(endpoint);
+          console.log("response", response);
+          const filteredResponse = response.filter(
+            (image) => image.id !== parseInt(location.pathname.substring(1))
+          );
+          sessionStorage.setItem(
+            `arts-detail-${location.pathname}`,
+            JSON.stringify(filteredResponse)
+          );
+        }
+        if (location.state?.photo) {
+          sessionStorage.setItem(
+            `art-showcase-${location.pathname}`,
+            JSON.stringify(location.state.photo)
+          );
+        }
+        if (!sessionStorage.getItem(`art-showcase-${location.pathname}`)) {
+          const response = await fetchAPI(`/arts/id${location.pathname}`);
+          sessionStorage.setItem(
+            `art-showcase-${location.pathname}`,
+            JSON.stringify(response)
+          );
+          setArt(response);
+        } else {
+          setArt(
+            JSON.parse(
+              sessionStorage.getItem(`art-showcase-${location.pathname}`)
+            )
+          );
+        }
+        setIsReady(true);
+      } catch (error) {
+        console.error("Failed to fetch similar arts: " + error.message);
+      }
+    };
+
+    fetchSimilarArts();
+  }, [isReady, location.pathname]);
 
   // Close modal when location changes
   useEffect(() => {
@@ -56,10 +98,10 @@ const ArtDetailPage = () => {
 
   // Function to go back
   const goBack = () => {
-    router.history.back();
+    navigate(-1);
   };
 
-  if (!art) return null;
+  //if (!art) return null;
 
   return (
     <>
@@ -80,18 +122,24 @@ const ArtDetailPage = () => {
           width="fit-content"
           maxWidth="80vw"
         >
-          <OptimizedImage
-            src={art.src}
-            objectFit="cover"
-            borderRadius="lg"
-            maxHeight="100%"
-            boxShadow="2xl"
-            cursor="zoom-in"
-            onClick={(e) => {
-              e.stopPropagation(); // Prevents the VStack onClick from firing
-              onOpen();
-            }}
-          />
+          {art ? (
+            <OptimizedImage
+              src={art.src}
+              objectFit="cover"
+              borderRadius="lg"
+              maxHeight="100%"
+              boxShadow="2xl"
+              cursor="zoom-in"
+              onClick={(e) => {
+                e.stopPropagation(); // Prevents the VStack onClick from firing
+                onOpen();
+              }}
+            />
+          ) : (
+            <Box display="flex" justifyContent="center" py={4} width="100%">
+              <Spinner size="md" thickness="4px" color="gray.200" />
+            </Box>
+          )}
         </Box>
         <Modal
           isOpen={isOpen}
@@ -111,22 +159,18 @@ const ArtDetailPage = () => {
             alignItems="center"
             justifyContent="center"
           >
-            <Image
-              src={art.src}
-              objectFit="contain"
-              maxH="100vh"
-              maxW="100vw"
-            />
+            {art && (
+              <OptimizedImage
+                src={art.src}
+                objectFit="contain"
+                maxH="100vh"
+                maxW="100vw"
+              />
+            )}
           </ModalContent>
         </Modal>
       </VStack>
-      {isLoading ? (
-        <Box display="flex" justifyContent="center" py={4} width="100%">
-          <Spinner size="md" thickness="4px" color="gray.200" />
-        </Box>
-      ) : (
-        <ArtGallery arts={similarArts} />
-      )}
+      <ArtGallery isReady={isReady} />
     </>
   );
 };

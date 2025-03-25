@@ -9,7 +9,7 @@ import {
   Image,
   VStack,
 } from "@chakra-ui/react";
-import ArtGallery from "./ArtGallery";
+import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
 import { useUser } from "../contexts/UserContext";
 import { useAuthRedirect } from "../hooks/useAuthRedirect";
