@@ -11,10 +11,10 @@ export const ArtGallery = ({ isReady }) => {
   const loaderRef = useRef(null);
   const galleryRef = useRef(null);
   const boxRef = useRef(null);
-  const [isCleaning, setIsCleaning] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(true);
   const location = useLocation();
   const { searchQuery, setSearchQuery } = useSearchQuery();
-  const ITEMS_PER_PAGE = 5;
+  const ITEMS_PER_PAGE = 20;
 
   const [page, setPage] = useState(0);
   const [scrollPosition, setScrollPosition] = useState(0);
@@ -172,7 +172,7 @@ export const ArtGallery = ({ isReady }) => {
       boxRef.current
     ) {
       console.log("restoring page");
-      let position;
+      let position = 0;
       if (location.pathname === "/") {
         position = parseInt(
           sessionStorage.getItem(`scrollPosition-${"main-" + searchQuery}`),
@@ -369,9 +369,9 @@ export const ArtGallery = ({ isReady }) => {
               photos={visibleArts}
               direction="column"
               columns={(containerWidth) => {
-                if (containerWidth >= 1280) return 5; // xl
-                if (containerWidth >= 1024) return 4; // lg
-                if (containerWidth >= 512) return 3; // md
+                if (containerWidth >= 1280) return 6; // xl
+                if (containerWidth >= 1024) return 5; // lg
+                if (containerWidth >= 512) return 4; // md
                 return 2; // default
               }}
               onClick={handleClick}
@@ -388,8 +388,9 @@ export const ArtGallery = ({ isReady }) => {
             ref={loaderRef}
             display="flex"
             justifyContent="center"
-            py={4}
             width="100%"
+            paddingTop="16px"
+            paddingBottom="16px"
           >
             <Spinner size="md" thickness="4px" color="gray.200" />
           </Box>
