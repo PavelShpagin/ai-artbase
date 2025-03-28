@@ -132,6 +132,7 @@ const Header = () => {
         <RouterLink
           onClick={() => {
             setSearchQuery("");
+            window.scrollTo(0, 0);
           }}
           to="/"
           style={{ textDecoration: "none" }}

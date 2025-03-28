@@ -84,7 +84,7 @@ const ArtDetailPage = () => {
     };
     setArt(null);
     fetchArt();
-  }, [location.pathname, location.state]);
+  }, [location.pathname]);
 
   // Close modal when location changes
   useEffect(() => {
@@ -167,7 +167,7 @@ const ArtDetailPage = () => {
           </ModalContent>
         </Modal>
       </VStack>
-      <ArtGallery fetchArts={fetchSimilarArts} />
+      <ArtGallery fetchArts={fetchSimilarArts} setArt={setArt} />
     </>
   );
 };

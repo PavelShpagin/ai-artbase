@@ -12,7 +12,7 @@ import { Spinner, Box } from "@chakra-ui/react";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
 
-export const ArtGallery = ({ fetchArts }) => {
+export const ArtGallery = ({ fetchArts, setArt }) => {
   const navigate = useNavigate();
   const loaderRef = useRef(null);
   const galleryRef = useRef(null);
@@ -35,6 +35,9 @@ export const ArtGallery = ({ fetchArts }) => {
   const [arts, setArts] = useState([]);
   const navType = useNavigationType();
 
+  // Add a ref to track the current path
+  const currentPathRef = useRef(location.pathname);
+
   // Helper to get current path key
   const getPathKey = useCallback(() => {
     return location.pathname === "/"
@@ -53,6 +56,7 @@ export const ArtGallery = ({ fetchArts }) => {
       prevGetPathKeyRef.current = getPathKey;
       prevFetchArtsRef.current = fetchArts;
       window.removeEventListener("scroll", handleScroll);
+      currentPathRef.current = location.pathname;
       setStageStatus({
         stageCleaningComplete: false,
         stageFetchingComplete: false,
@@ -69,6 +73,7 @@ export const ArtGallery = ({ fetchArts }) => {
       stageStatus.stageInitialRenderComplete
     )
       return;
+    console.log("START", currentPathRef.current);
     setArts([]);
     setPage(0);
     setVisibleArts([]);
@@ -142,12 +147,20 @@ export const ArtGallery = ({ fetchArts }) => {
           sessionStorage.getItem(`scrollPosition-${pathKey}`),
           10
         );
+
+        if (location.pathname !== currentPathRef.current) return;
+
         if (!isNaN(savedPosition)) {
           window.scrollTo(0, savedPosition);
         }
       }
+      console.log("!!!locationPathname", location.pathname);
+      console.log("!!!currentPathRef.current", currentPathRef.current);
+      //console.log("!!!savedVisibleArts", savedVisibleArts);
       // Restore previous state
+      if (location.pathname !== currentPathRef.current) return;
       setVisibleArts(JSON.parse(savedVisibleArts));
+      if (location.pathname !== currentPathRef.current) return;
       setPage(parseInt(savedPage, 10));
     } else if (!savedVisibleArts || !savedPage) {
       // Create new first page
@@ -161,7 +174,9 @@ export const ArtGallery = ({ fetchArts }) => {
         title: img.title || "Untitled",
       }));
 
+      if (location.pathname !== currentPathRef.current) return;
       setVisibleArts(imageData);
+      if (location.pathname !== currentPathRef.current) return;
       setPage(1);
 
       // Save to session storage
@@ -174,6 +189,11 @@ export const ArtGallery = ({ fetchArts }) => {
 
     setStageStatus((prev) => ({ ...prev, stageInitialRenderComplete: true }));
   }, [stageStatus, boxRef]);
+
+  // useEffect(() => {
+  //   console.log("CURRENT PATH", currentPathRef.current);
+  //   console.log("VISIBLE ARTS", visibleArts);
+  // }, [visibleArts]);
 
   // STAGE 3: Infinite scroll setup
   useEffect(() => {
@@ -206,19 +226,9 @@ export const ArtGallery = ({ fetchArts }) => {
               JSON.stringify(imageData)
             );
 
+            if (location.pathname !== currentPathRef.current) return;
             setVisibleArts(imageData);
             setPage((prev) => prev + 1);
-
-            // // Update layout height after new images are loaded
-            // if (galleryRef.current) {
-            //   const newHeight = galleryRef.current.scrollHeight;
-            //   console.log("!!!newHeight", newHeight);
-            //   sessionStorage.setItem(
-            //     `layoutHeight-${pathKey}`,
-            //     newHeight.toString()
-            //   );
-            //   setLayoutHeight(newHeight);
-            // }
           }, 300);
         }
       },
@@ -292,7 +302,10 @@ export const ArtGallery = ({ fetchArts }) => {
 
   // Handle navigation and save scroll position
   const handleClick = (event, { photo }) => {
-    // sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
+    sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
+    if (setArt) {
+      setArt(null);
+    }
     navigate(`/${photo.id}`, { state: { photo } });
   };
 
