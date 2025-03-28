@@ -82,6 +82,7 @@ const ArtDetailPage = () => {
         );
       }
     };
+    setArt(null);
     fetchArt();
   }, [location.pathname, location.state]);
 

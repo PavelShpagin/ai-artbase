@@ -18,7 +18,10 @@ const MainGallery = () => {
   useLayoutEffect(() => {
     window.addEventListener("popstate", (e) => {
       console.log("e.state.state", e.state.state);
-      setSearchQuery(e.state.state || "");
+      const query = e.state.state || "";
+      if (query !== searchQuery) {
+        setSearchQuery(query);
+      }
     });
 
     return () => {
@@ -30,8 +33,6 @@ const MainGallery = () => {
 
   const cachedFetchArts = useCallback(async () => {
     try {
-      console.log("searchQuery", searchQuery);
-      console.log("prevSearchQueryRef", prevSearchQueryRef.current);
       if (prevSearchQueryRef.current.length === 0 && searchQuery.length === 1) {
         window.history.pushState({ state: searchQuery }, "", "/");
       } else if (

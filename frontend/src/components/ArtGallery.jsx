@@ -6,9 +6,9 @@ import React, {
   useCallback,
 } from "react";
 import Gallery from "react-photo-gallery";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Box } from "@mui/material";
-import { Spinner } from "@chakra-ui/react";
+import { useNavigate, useLocation, useNavigationType } from "react-router-dom";
+// import { Box } from "@mui/material";
+import { Spinner, Box } from "@chakra-ui/react";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
 
@@ -30,11 +30,10 @@ export const ArtGallery = ({ fetchArts }) => {
 
   // Gallery states
   const [page, setPage] = useState(0);
-  const [scrollPosition, setScrollPosition] = useState(0);
   const [layoutHeight, setLayoutHeight] = useState(0);
   const [visibleArts, setVisibleArts] = useState([]);
   const [arts, setArts] = useState([]);
-  const [galleryReady, setGalleryReady] = useState(false);
+  const navType = useNavigationType();
 
   // Helper to get current path key
   const getPathKey = useCallback(() => {
@@ -43,25 +42,49 @@ export const ArtGallery = ({ fetchArts }) => {
       : `detail-${location.pathname}`;
   }, [location.pathname, searchQuery]);
 
+  const prevGetPathKeyRef = useRef(null);
+  const prevFetchArtsRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (
+      prevGetPathKeyRef.current !== getPathKey &&
+      prevFetchArtsRef.current !== fetchArts
+    ) {
+      prevGetPathKeyRef.current = getPathKey;
+      prevFetchArtsRef.current = fetchArts;
+      window.removeEventListener("scroll", handleScroll);
+      setStageStatus({
+        stageCleaningComplete: false,
+        stageFetchingComplete: false,
+        stageInitialRenderComplete: false,
+      });
+    }
+  }, [getPathKey, fetchArts]);
+
   // STAGE 1A: Cleaning
   useLayoutEffect(() => {
-    console.log("Stage 1A: Cleaning states");
+    if (
+      stageStatus.stageCleaningComplete ||
+      stageStatus.stageFetchingComplete ||
+      stageStatus.stageInitialRenderComplete
+    )
+      return;
     setArts([]);
-    setGalleryReady(false);
     setPage(0);
     setVisibleArts([]);
     setLayoutHeight(0);
-    setScrollPosition(0);
-
     // Mark cleaning as complete
     setStageStatus((prev) => ({ ...prev, stageCleaningComplete: true }));
-  }, [fetchArts]);
+  }, [stageStatus]);
 
   // STAGE 1B: Fetching data
   useLayoutEffect(() => {
-    if (!stageStatus.stageCleaningComplete) return;
-
-    console.log("Stage 1B: Fetching data");
+    if (
+      !stageStatus.stageCleaningComplete ||
+      stageStatus.stageFetchingComplete ||
+      stageStatus.stageInitialRenderComplete
+    )
+      return;
 
     const loadData = async () => {
       try {
@@ -78,6 +101,10 @@ export const ArtGallery = ({ fetchArts }) => {
           setArts(storedArts);
         }
 
+        setLayoutHeight(
+          parseInt(sessionStorage.getItem(`layoutHeight-${pathKey}`) || "0", 10)
+        );
+
         // Mark fetching as complete
         setStageStatus((prev) => ({ ...prev, stageFetchingComplete: true }));
       } catch (error) {
@@ -86,39 +113,43 @@ export const ArtGallery = ({ fetchArts }) => {
     };
 
     loadData();
-  }, [stageStatus.stageCleaningComplete, fetchArts, getPathKey]);
+  }, [stageStatus]);
 
   // STAGE 2: Initial rendering
   useLayoutEffect(() => {
-    if (!stageStatus.stageFetchingComplete || arts.length === 0) return;
+    if (
+      !stageStatus.stageCleaningComplete ||
+      !stageStatus.stageFetchingComplete ||
+      stageStatus.stageInitialRenderComplete
+    )
+      return;
 
-    console.log("Stage 2: Setting up initial gallery view");
     const pathKey = getPathKey();
 
     // Check if we have saved visible arts
     const savedVisibleArts = sessionStorage.getItem(`visibleArts-${pathKey}`);
     const savedPage = sessionStorage.getItem(`page-${pathKey}`);
 
-    if (savedVisibleArts && savedPage) {
-      // Restore previous state
-      setVisibleArts(JSON.parse(savedVisibleArts));
-      setPage(parseInt(savedPage, 10));
-
-      // Check navigation type and restore scroll if needed
-      const performanceEntry = performance.getEntriesByType("navigation")[0];
-      const navigationType = performanceEntry ? performanceEntry.type : "";
-
-      if (navigationType === "back_forward") {
+    if (
+      savedVisibleArts &&
+      savedPage &&
+      boxRef.current &&
+      boxRef.current.offsetHeight == layoutHeight
+    ) {
+      // Restore scroll position if we're coming from a back/forward navigation
+      if (navType === "POP") {
         const savedPosition = parseInt(
           sessionStorage.getItem(`scrollPosition-${pathKey}`),
           10
         );
         if (!isNaN(savedPosition)) {
           window.scrollTo(0, savedPosition);
-          setScrollPosition(savedPosition);
         }
       }
-    } else {
+      // Restore previous state
+      setVisibleArts(JSON.parse(savedVisibleArts));
+      setPage(parseInt(savedPage, 10));
+    } else if (!savedVisibleArts || !savedPage) {
       // Create new first page
       const firstPageImages = arts.slice(0, ITEMS_PER_PAGE);
       const imageData = firstPageImages.map((img) => ({
@@ -141,26 +172,22 @@ export const ArtGallery = ({ fetchArts }) => {
       );
     }
 
-    // Mark initial rendering as complete and set gallery as ready
-    setGalleryReady(true);
     setStageStatus((prev) => ({ ...prev, stageInitialRenderComplete: true }));
-  }, [stageStatus.stageFetchingComplete, arts, getPathKey]);
+  }, [stageStatus, boxRef]);
 
   // STAGE 3: Infinite scroll setup
   useEffect(() => {
     if (
       !stageStatus.stageInitialRenderComplete ||
-      !loaderRef.current ||
-      arts.length === 0
+      !stageStatus.stageFetchingComplete ||
+      !stageStatus.stageCleaningComplete ||
+      !loaderRef.current
     )
       return;
-
-    console.log("Stage 3: Setting up infinite scroll");
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && arts.length > page * ITEMS_PER_PAGE) {
-          console.log("Loading more images");
           setTimeout(() => {
             const nextPageImages = arts.slice(0, (page + 1) * ITEMS_PER_PAGE);
             const imageData = nextPageImages.map((img) => ({
@@ -181,6 +208,17 @@ export const ArtGallery = ({ fetchArts }) => {
 
             setVisibleArts(imageData);
             setPage((prev) => prev + 1);
+
+            // // Update layout height after new images are loaded
+            // if (galleryRef.current) {
+            //   const newHeight = galleryRef.current.scrollHeight;
+            //   console.log("!!!newHeight", newHeight);
+            //   sessionStorage.setItem(
+            //     `layoutHeight-${pathKey}`,
+            //     newHeight.toString()
+            //   );
+            //   setLayoutHeight(newHeight);
+            // }
           }, 300);
         }
       },
@@ -190,36 +228,45 @@ export const ArtGallery = ({ fetchArts }) => {
     observer.observe(loaderRef.current);
 
     return () => observer.disconnect();
-  }, [
-    stageStatus.stageInitialRenderComplete,
-    arts,
-    page,
-    getPathKey,
-    loaderRef,
-  ]);
+  }, [stageStatus, arts, page, loaderRef, galleryRef]);
 
   // Track layout height changes
   useLayoutEffect(() => {
-    if (!galleryRef.current || !galleryReady) return;
+    if (
+      !galleryRef.current ||
+      !stageStatus.stageInitialRenderComplete ||
+      !stageStatus.stageFetchingComplete ||
+      !stageStatus.stageCleaningComplete ||
+      !boxRef.current ||
+      boxRef.current.offsetHeight !== layoutHeight
+    )
+      return;
 
     const resizeObserver = new ResizeObserver((entries) => {
       const galleryHeight = entries[0].target.scrollHeight;
-      const pathKey = getPathKey();
-      sessionStorage.setItem(
-        `layoutHeight-${pathKey}`,
-        galleryHeight.toString()
-      );
-      setLayoutHeight(galleryHeight);
+      if (galleryHeight > layoutHeight) {
+        const pathKey = getPathKey();
+        sessionStorage.setItem(
+          `layoutHeight-${pathKey}`,
+          galleryHeight.toString()
+        );
+        setLayoutHeight(galleryHeight);
+      }
     });
 
     resizeObserver.observe(galleryRef.current);
 
     return () => resizeObserver.disconnect();
-  }, [galleryReady, getPathKey]);
+  }, [stageStatus]);
 
   // Save scroll position when scrolling
   const handleScroll = useCallback(() => {
-    if (!galleryReady) return;
+    if (
+      !stageStatus.stageInitialRenderComplete ||
+      !stageStatus.stageFetchingComplete ||
+      !stageStatus.stageCleaningComplete
+    )
+      return;
 
     const currentPosition = window.scrollY;
     const pathKey = getPathKey();
@@ -227,29 +274,32 @@ export const ArtGallery = ({ fetchArts }) => {
       `scrollPosition-${pathKey}`,
       currentPosition.toString()
     );
-    setScrollPosition(currentPosition);
-  }, [galleryReady, getPathKey]);
+  }, [stageStatus]);
 
   // Add scroll event listener when gallery is ready
   useEffect(() => {
-    if (galleryReady) {
+    if (
+      stageStatus.stageInitialRenderComplete &&
+      stageStatus.stageFetchingComplete &&
+      stageStatus.stageCleaningComplete
+    ) {
       window.addEventListener("scroll", handleScroll);
     }
     return () => {
       window.removeEventListener("scroll", handleScroll);
     };
-  }, [galleryReady, handleScroll]);
+  }, [stageStatus, handleScroll]);
 
   // Handle navigation and save scroll position
   const handleClick = (event, { photo }) => {
-    sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
+    // sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
     navigate(`/${photo.id}`, { state: { photo } });
   };
 
   // Custom renderer for images
   const imageRenderer = ({ index, left, top, key, photo }) => (
     <div
-      key={key}
+      key={`${key}-${index}`}
       style={{
         position: "absolute",
         left,
@@ -288,20 +338,19 @@ export const ArtGallery = ({ fetchArts }) => {
   return (
     <>
       <div className="p-4" ref={galleryRef}>
-        {!galleryReady && layoutHeight > 0 && (
-          <div
+        {
+          <Box
             ref={boxRef}
-            style={{
-              height: `${layoutHeight}px`,
-              position: "absolute",
-              width: "100%",
-              left: 0,
-              opacity: 0,
-              pointerEvents: "none",
-            }}
-            aria-hidden="true"
+            height={`${layoutHeight}px`}
+            position="absolute"
+            width="100%"
+            left={0}
+            opacity={0}
+            // bg="black"
+            pointerEvents="none"
+            //aria-hidden="true"
           />
-        )}
+        }
         {visibleArts && visibleArts.length > 0 && (
           <div className="gallery" onClick={(e) => e.stopPropagation()}>
             <Gallery
