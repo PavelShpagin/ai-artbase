@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import {
   VStack,
   Box,
@@ -25,16 +31,6 @@ const ArtDetailPage = () => {
 
   const [isReady, setIsReady] = useState(false);
 
-  useLayoutEffect(() => {
-    if (location.state?.photo) {
-      setArt(location.state?.photo);
-    }
-  }, [location.state]);
-
-  useEffect(() => {
-    setIsReady(false);
-  }, [location.pathname]);
-
   // Navigate back when search query changes
   useEffect(() => {
     if (prevSearchQueryRef.current !== searchQuery) {
@@ -43,51 +39,51 @@ const ArtDetailPage = () => {
     prevSearchQueryRef.current = searchQuery;
   }, [searchQuery, navigate]);
 
-  useEffect(() => {
-    const fetchSimilarArts = async () => {
-      if (isReady) return;
-      try {
-        const endpoint = `/arts/similar${location.pathname}`;
-        console.log(endpoint);
-        if (!sessionStorage.getItem(`arts-detail-${location.pathname}`)) {
-          const response = await fetchAPI(endpoint);
-          console.log("response", response);
-          const filteredResponse = response.filter(
-            (image) => image.id !== parseInt(location.pathname.substring(1))
-          );
-          sessionStorage.setItem(
-            `arts-detail-${location.pathname}`,
-            JSON.stringify(filteredResponse)
-          );
-        }
-        if (location.state?.photo) {
-          sessionStorage.setItem(
-            `art-showcase-${location.pathname}`,
-            JSON.stringify(location.state.photo)
-          );
-        }
-        if (!sessionStorage.getItem(`art-showcase-${location.pathname}`)) {
-          const response = await fetchAPI(`/arts/id${location.pathname}`);
-          sessionStorage.setItem(
-            `art-showcase-${location.pathname}`,
-            JSON.stringify(response)
-          );
-          setArt(response);
-        } else {
-          setArt(
-            JSON.parse(
-              sessionStorage.getItem(`art-showcase-${location.pathname}`)
-            )
-          );
-        }
-        setIsReady(true);
-      } catch (error) {
-        console.error("Failed to fetch similar arts: " + error.message);
+  const fetchSimilarArts = useCallback(async () => {
+    try {
+      const endpoint = `/arts/similar${location.pathname}`;
+      if (!sessionStorage.getItem(`arts-detail-${location.pathname}`)) {
+        const response = await fetchAPI(endpoint);
+        const filteredResponse = response.filter(
+          (image) => image.id !== parseInt(location.pathname.substring(1))
+        );
+        sessionStorage.setItem(
+          `arts-detail-${location.pathname}`,
+          JSON.stringify(filteredResponse)
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch similar arts: " + error.message);
+    }
+  }, [location.pathname]);
+
+  useLayoutEffect(() => {
+    const fetchArt = async () => {
+      if (location.state?.photo) {
+        sessionStorage.setItem(
+          `art-showcase-${location.pathname}`,
+          JSON.stringify(location.state.photo)
+        );
+        setArt(location.state?.photo);
+        return;
+      }
+      if (!sessionStorage.getItem(`art-showcase-${location.pathname}`)) {
+        const response = await fetchAPI(`/arts/id${location.pathname}`);
+        sessionStorage.setItem(
+          `art-showcase-${location.pathname}`,
+          JSON.stringify(response)
+        );
+        setArt(response);
+      } else {
+        setArt(
+          JSON.parse(
+            sessionStorage.getItem(`art-showcase-${location.pathname}`)
+          )
+        );
       }
     };
-
-    fetchSimilarArts();
-  }, [isReady, location.pathname]);
+    fetchArt();
+  }, [location.pathname, location.state]);
 
   // Close modal when location changes
   useEffect(() => {
@@ -170,7 +166,7 @@ const ArtDetailPage = () => {
           </ModalContent>
         </Modal>
       </VStack>
-      <ArtGallery isReady={isReady} />
+      <ArtGallery fetchArts={fetchSimilarArts} />
     </>
   );
 };

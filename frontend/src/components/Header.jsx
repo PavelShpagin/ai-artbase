@@ -129,7 +129,13 @@ const Header = () => {
         px={{ base: 2, md: 4 }}
         gap={10}
       >
-        <RouterLink to="/" style={{ textDecoration: "none" }}>
+        <RouterLink
+          onClick={() => {
+            setSearchQuery("");
+          }}
+          to="/"
+          style={{ textDecoration: "none" }}
+        >
           <Box display={{ base: "none", md: "flex" }}>
             <div className="ai-artbase-logo">Ai ArtBase</div>
           </Box>
