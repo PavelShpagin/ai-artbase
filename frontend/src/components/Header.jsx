@@ -85,7 +85,9 @@ const UserMenu = ({ onSignOut }) => {
 
   const handleProfileCLick = () => {
     onClose();
-    navigate("/profile");
+    if (user && user.id) {
+      navigate(`/profile/${user.id}`);
+    }
   };
 
   return (
@@ -250,7 +252,7 @@ const Header = () => {
             cursor="pointer"
             onClick={() => setIsFilterOpen(!isFilterOpen)}
           >
-            <Icon as={BiFilterAlt} color="rgb(186, 186, 196)" boxSize={5} />
+            <Icon as={BiFilterAlt} color="rgb(173, 179, 204)" boxSize={5} />
           </Box>
 
           {/* Categories Modal */}
@@ -286,40 +288,38 @@ const Header = () => {
           </Modal>
         </InputGroup>
         <Flex align="center" gap={2}>
-          <div style={{ zIndex: 1 }}>
-            {localStorage.getItem("token") ? (
-              user && (
-                <>
-                  <Box display={{ base: "none", md: "flex" }}>
-                    <PurpleButton name="Upload" onClick={handleUploadClick} />
-                  </Box>
-                  <Box display={{ base: "flex", md: "none" }} px={1}>
-                    <PurpleButton
-                      name={<MdFileUpload />}
-                      onClick={handleUploadClick}
-                      px={2}
-                      py={1}
-                    />
-                  </Box>
-                  <UserMenu user={user} setUser={setUser} />
-                </>
-              )
-            ) : (
+          {localStorage.getItem("token") ? (
+            user && (
               <>
                 <Box display={{ base: "none", md: "flex" }}>
-                  <PurpleButton name="Sign In" onClick={handleSignInClick} />
+                  <PurpleButton name="Upload" onClick={handleUploadClick} />
                 </Box>
                 <Box display={{ base: "flex", md: "none" }} px={1}>
                   <PurpleButton
-                    name={<FaSignInAlt />}
-                    onClick={handleSignInClick}
+                    name={<MdFileUpload />}
+                    onClick={handleUploadClick}
                     px={2}
                     py={1}
                   />
                 </Box>
+                <UserMenu user={user} setUser={setUser} />
               </>
-            )}
-          </div>
+            )
+          ) : (
+            <>
+              <Box display={{ base: "none", md: "flex" }}>
+                <PurpleButton name="Sign In" onClick={handleSignInClick} />
+              </Box>
+              <Box display={{ base: "flex", md: "none" }} px={1}>
+                <PurpleButton
+                  name={<FaSignInAlt />}
+                  onClick={handleSignInClick}
+                  px={2}
+                  py={1}
+                />
+              </Box>
+            </>
+          )}
         </Flex>
       </Flex>
       <SignInModal

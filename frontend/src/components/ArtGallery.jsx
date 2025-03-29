@@ -8,9 +8,10 @@ import React, {
 import Gallery from "react-photo-gallery";
 import { useNavigate, useLocation, useNavigationType } from "react-router-dom";
 // import { Box } from "@mui/material";
-import { Spinner, Box } from "@chakra-ui/react";
+import { Spinner, Box, Text } from "@chakra-ui/react";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
+import { useUser } from "../contexts/UserContext";
 
 export const ArtGallery = ({ fetchArts, setArt }) => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   const boxRef = useRef(null);
   const location = useLocation();
   const { searchQuery } = useSearchQuery();
+  const { user } = useUser();
   const ITEMS_PER_PAGE = 20;
 
   // Stage states
@@ -43,10 +45,14 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
   // Helper to get current path key
   const getPathKey = useCallback(() => {
+    if (location.pathname.startsWith("/profile")) {
+      const id = location.pathname.split("/")[2];
+      return `profile-${id}`;
+    }
     return location.pathname === "/"
       ? `main-${searchQuery}`
       : `detail-${location.pathname}`;
-  }, [location.pathname, searchQuery]);
+  }, [location.pathname, searchQuery, user]);
 
   const prevGetPathKeyRef = useRef(null);
   const prevFetchArtsRef = useRef(null);
@@ -373,6 +379,11 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     console.log("!!!arts", arts);
   }, [visibleArts, arts]);
 
+  useEffect(() => {
+    console.log("------arts", arts);
+    console.log("------stageStatus", stageStatus);
+  }, [stageStatus, arts]);
+
   return (
     <>
       <div className="p-4" ref={galleryRef}>
@@ -406,21 +417,35 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
           </div>
         )}
 
-        {(!arts ||
-          !visibleArts ||
-          arts.length === 0 ||
-          visibleArts.length < arts.length) && (
+        {arts.length === 0 && stageStatus.stageFetchingComplete && (
           <Box
-            ref={loaderRef}
             display="flex"
             justifyContent="center"
             width="100%"
             paddingTop="16px"
             paddingBottom="16px"
           >
-            <Spinner size="md" thickness="4px" color="gray.200" />
+            <Text fontSize="lg" color="gray.500">
+              No images here yet...
+            </Text>
           </Box>
         )}
+
+        {(arts.length > 0 || !stageStatus.stageFetchingComplete) &&
+          (!visibleArts ||
+            arts.length === 0 ||
+            visibleArts.length < arts.length) && (
+            <Box
+              ref={loaderRef}
+              display="flex"
+              justifyContent="center"
+              width="100%"
+              paddingTop="16px"
+              paddingBottom="16px"
+            >
+              <Spinner size="md" thickness="4px" color="gray.200" />
+            </Box>
+          )}
       </div>
     </>
   );

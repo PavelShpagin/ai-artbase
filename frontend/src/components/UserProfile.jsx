@@ -1,36 +1,47 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Box,
   Avatar,
   Flex,
   Text,
   useColorModeValue,
-  Grid,
-  Image,
   VStack,
 } from "@chakra-ui/react";
 import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
-import { useUser } from "../contexts/UserContext";
-import { useAuthRedirect } from "../hooks/useAuthRedirect";
+import { useParams } from "react-router-dom";
+//import { useAuthRedirect } from "../hooks/useAuthRedirect";
 
 const UserProfile = () => {
-  const { user, setUser } = useUser();
-  const [images, setImages] = useState([]);
-  useAuthRedirect();
+  const { id } = useParams(); // Extract id from URL
+  const [user, setUser] = useState(null);
+  //useAuthRedirect();
 
   const textColor = useColorModeValue("gray.800", "white");
 
-  useEffect(() => {
-    const fetchArts = async () => {
-      if (user && user.id) {
-        const data = await fetchAPI(`/arts/${user.id}`, "GET");
-        setImages(data);
-        console.log(data);
+  const fetchArts = useCallback(async () => {
+    if (id) {
+      const pathKey = `profile-${id}`;
+      const storedArts = sessionStorage.getItem(`arts-${pathKey}`);
+
+      if (storedArts) {
+        return;
       }
+
+      const data = await fetchAPI(`/arts/${id}`, "GET");
+      sessionStorage.setItem(`arts-${pathKey}`, JSON.stringify(data));
+    }
+  }, [id]);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const userData = await fetchAPI(`/users/${id}`, "GET");
+      console.log("userData", userData);
+      setUser(userData);
     };
-    fetchArts();
-  }, [user]);
+
+    fetchUser();
+  }, [id]);
 
   return (
     <VStack spacing={0} align="center" minH="100vh" m={0}>
@@ -53,15 +64,7 @@ const UserProfile = () => {
         borderRadius="lg"
         bg="gray.50"
       >
-        {images.length > 0 ? (
-          <ArtGallery arts={images} />
-        ) : (
-          <Box textAlign="center" w="full" p={10}>
-            <Text fontSize="xl" color={textColor} fontWeight="500">
-              You didn't upload any images yet...
-            </Text>
-          </Box>
-        )}
+        <ArtGallery fetchArts={fetchArts} />
       </Box>
     </VStack>
   );

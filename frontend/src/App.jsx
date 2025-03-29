@@ -48,7 +48,7 @@ function App() {
                     <Route path="/:id" element={<ArtDetailPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/admin" element={<AdminTab />} />
-                    <Route path="/profile" element={<UserProfile />} />
+                    <Route path="/profile/:id" element={<UserProfile />} />
                   </Routes>
                 </Box>
               </Router>
