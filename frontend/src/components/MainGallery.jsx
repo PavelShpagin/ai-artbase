@@ -16,19 +16,13 @@ const MainGallery = () => {
   const location = useLocation();
 
   useLayoutEffect(() => {
-    window.addEventListener("popstate", (e) => {
-      console.log("e.state.state", e.state.state);
-      const query = e.state.state || "";
-      if (query !== searchQuery) {
-        setSearchQuery(query);
-      }
-    });
-
-    return () => {
-      window.removeEventListener("popstate", (e) => {
-        console.log("e.state", e.state);
-      });
+    const handlePopState = (e) => {
+      const query = e?.state?.state || "";
+      setSearchQuery(query);
     };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   const cachedFetchArts = useCallback(async () => {

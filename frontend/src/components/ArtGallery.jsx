@@ -142,18 +142,18 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       boxRef.current.offsetHeight == layoutHeight
     ) {
       // Restore scroll position if we're coming from a back/forward navigation
-      if (navType === "POP") {
-        const savedPosition = parseInt(
-          sessionStorage.getItem(`scrollPosition-${pathKey}`),
-          10
-        );
+      //if (navType === "POP") {
+      const savedPosition = parseInt(
+        sessionStorage.getItem(`scrollPosition-${pathKey}`),
+        10
+      );
 
-        if (location.pathname !== currentPathRef.current) return;
+      if (location.pathname !== currentPathRef.current) return;
 
-        if (!isNaN(savedPosition)) {
-          window.scrollTo(0, savedPosition);
-        }
+      if (!isNaN(savedPosition)) {
+        window.scrollTo(0, savedPosition);
       }
+      //}
       console.log("!!!locationPathname", location.pathname);
       console.log("!!!currentPathRef.current", currentPathRef.current);
       //console.log("!!!savedVisibleArts", savedVisibleArts);
@@ -348,6 +348,11 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     </div>
   );
 
+  useEffect(() => {
+    console.log("!!!visibleArts", visibleArts);
+    console.log("!!!arts", arts);
+  }, [visibleArts, arts]);
+
   return (
     <>
       <div className="p-4" ref={galleryRef}>
@@ -372,7 +377,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
               columns={(containerWidth) => {
                 if (containerWidth >= 1280) return 6; // xl
                 if (containerWidth >= 1024) return 5; // lg
-                if (containerWidth >= 512) return 4; // md
+                if (containerWidth >= 512) return 3; // md
                 return 2; // default
               }}
               onClick={handleClick}
