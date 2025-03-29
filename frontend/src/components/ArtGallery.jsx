@@ -38,6 +38,9 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   // Add a ref to track the current path
   const currentPathRef = useRef(location.pathname);
 
+  // Add a new ref to track the latest search query
+  const latestSearchQueryRef = useRef(searchQuery);
+
   // Helper to get current path key
   const getPathKey = useCallback(() => {
     return location.pathname === "/"
@@ -57,13 +60,21 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       prevFetchArtsRef.current = fetchArts;
       window.removeEventListener("scroll", handleScroll);
       currentPathRef.current = location.pathname;
+      latestSearchQueryRef.current = searchQuery; // Update the latest search query
+
+      // Reset all states immediately
+      setArts([]);
+      setPage(0);
+      setVisibleArts([]);
+      setLayoutHeight(0);
+
       setStageStatus({
-        stageCleaningComplete: false,
+        stageCleaningComplete: true, // Mark as complete immediately
         stageFetchingComplete: false,
         stageInitialRenderComplete: false,
       });
     }
-  }, [getPathKey, fetchArts]);
+  }, [getPathKey, fetchArts, searchQuery]); // Add searchQuery to dependencies
 
   // STAGE 1A: Cleaning
   useLayoutEffect(() => {
@@ -93,10 +104,14 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
     const loadData = async () => {
       try {
-        // Fetch arts from API if needed
+        const currentSearchQuery = latestSearchQueryRef.current;
         await fetchArts();
 
-        // Load arts from sessionStorage
+        // Check if the search query is still the same
+        if (currentSearchQuery !== latestSearchQueryRef.current) {
+          return; // Abort if search query changed during fetch
+        }
+
         const pathKey = getPathKey();
         const storedArts = JSON.parse(
           sessionStorage.getItem(`arts-${pathKey}`)
@@ -110,7 +125,6 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
           parseInt(sessionStorage.getItem(`layoutHeight-${pathKey}`) || "0", 10)
         );
 
-        // Mark fetching as complete
         setStageStatus((prev) => ({ ...prev, stageFetchingComplete: true }));
       } catch (error) {
         console.error("Error in data loading stage:", error);
@@ -118,7 +132,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     };
 
     loadData();
-  }, [stageStatus]);
+  }, [stageStatus, fetchArts]);
 
   // STAGE 2: Initial rendering
   useLayoutEffect(() => {
@@ -129,7 +143,13 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     )
       return;
 
+    const currentSearchQuery = latestSearchQueryRef.current;
     const pathKey = getPathKey();
+
+    // Check if the search query is still the same
+    if (currentSearchQuery !== latestSearchQueryRef.current) {
+      return; // Abort if search query changed
+    }
 
     // Check if we have saved visible arts
     const savedVisibleArts = sessionStorage.getItem(`visibleArts-${pathKey}`);
