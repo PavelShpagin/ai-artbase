@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Icon,
   Box,
@@ -16,6 +16,30 @@ import {
   useDisclosure,
   MenuDivider,
   useColorModeValue,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverHeader,
+  PopoverBody,
+  PopoverFooter,
+  PopoverArrow,
+  VStack,
+  StackDivider,
+  Text,
+  Select,
+  RadioGroup,
+  Radio,
+  Stack,
+  RangeSlider,
+  RangeSliderTrack,
+  RangeSliderFilledTrack,
+  RangeSliderThumb,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalCloseButton,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import {
@@ -31,9 +55,13 @@ import PurpleButton from "./Buttons";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import SignInModal from "./SignInModal";
 import { useUser } from "../contexts/UserContext";
-import { FaSignInAlt } from "react-icons/fa";
+import { FaSignInAlt, FaUser, FaCog } from "react-icons/fa";
 import { MdFileUpload } from "react-icons/md";
 import { useSearchQuery } from "../App";
+import { BiFilterAlt, BiSearch } from "react-icons/bi";
+import { useQuery } from "@tanstack/react-query";
+import fetchAPI from "../services/api";
+import { ChevronDownIcon } from "@chakra-ui/icons";
 
 const UserMenu = ({ onSignOut }) => {
   const navigate = useNavigate();
@@ -100,6 +128,46 @@ const Header = () => {
   const { searchQuery, setSearchQuery } = useSearchQuery();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user, setUser } = useUser();
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const searchBarRef = useRef(null);
+  const [modalStyle, setModalStyle] = useState({});
+
+  // Fetch categories
+  const { data: categories } = useQuery({
+    queryKey: ["topCategories"],
+    queryFn: async () => {
+      const response = await fetchAPI(
+        "/categories/top/",
+        "GET",
+        null,
+        {},
+        false
+      );
+      return response.json();
+    },
+  });
+
+  const updateModalStyle = () => {
+    if (searchBarRef.current) {
+      const { width, left } = searchBarRef.current.getBoundingClientRect();
+      setModalStyle({
+        width: `${width}px`,
+        left: `${left}px`,
+      });
+    }
+  };
+
+  useEffect(() => {
+    updateModalStyle();
+    window.addEventListener("resize", updateModalStyle);
+    return () => window.removeEventListener("resize", updateModalStyle);
+  }, []);
+
+  useEffect(() => {
+    if (isFilterOpen) {
+      updateModalStyle();
+    }
+  }, [isFilterOpen]);
 
   const handleSignInClick = () => setIsSignInModalOpen(true);
   const handleSignInModalClose = () => setIsSignInModalOpen(false);
@@ -152,8 +220,10 @@ const Header = () => {
           flexGrow={1}
           marginX="auto"
           maxW="600px"
+          position="relative"
+          ref={searchBarRef}
         >
-          <InputLeftElement pointerEvents="none">
+          <InputLeftElement pointerEvents="none" zIndex="1">
             <Icon as={SearchIcon} color="gray.400" />
           </InputLeftElement>
           <Input
@@ -168,41 +238,88 @@ const Header = () => {
             color="gray.600"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            pr="40px"
           />
+
+          <Box
+            position="absolute"
+            pt={2}
+            right="4"
+            top="50%"
+            transform="translateY(-50%) scale(1.1)"
+            cursor="pointer"
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+          >
+            <Icon as={BiFilterAlt} color="rgb(186, 186, 196)" boxSize={5} />
+          </Box>
+
+          {/* Categories Modal */}
+          <Modal isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)}>
+            <ModalOverlay />
+            <ModalContent
+              style={{
+                ...modalStyle,
+                position: "absolute",
+                top: "5px", // Adjust as needed
+              }}
+              maxW="none"
+            >
+              <ModalBody>
+                <Flex flexWrap="wrap" gap={2} my={2} justifyContent="center">
+                  {categories?.map((category) => (
+                    <Button
+                      key={category.name}
+                      size="sm"
+                      variant="outline"
+                      borderRadius="full"
+                      onClick={() => {
+                        // Will implement filtering later
+                        setIsFilterOpen(false);
+                      }}
+                    >
+                      {category.name}
+                    </Button>
+                  ))}
+                </Flex>
+              </ModalBody>
+            </ModalContent>
+          </Modal>
         </InputGroup>
         <Flex align="center" gap={2}>
-          {localStorage.getItem("token") ? (
-            user && (
+          <div style={{ zIndex: 1 }}>
+            {localStorage.getItem("token") ? (
+              user && (
+                <>
+                  <Box display={{ base: "none", md: "flex" }}>
+                    <PurpleButton name="Upload" onClick={handleUploadClick} />
+                  </Box>
+                  <Box display={{ base: "flex", md: "none" }} px={1}>
+                    <PurpleButton
+                      name={<MdFileUpload />}
+                      onClick={handleUploadClick}
+                      px={2}
+                      py={1}
+                    />
+                  </Box>
+                  <UserMenu user={user} setUser={setUser} />
+                </>
+              )
+            ) : (
               <>
                 <Box display={{ base: "none", md: "flex" }}>
-                  <PurpleButton name="Upload" onClick={handleUploadClick} />
+                  <PurpleButton name="Sign In" onClick={handleSignInClick} />
                 </Box>
                 <Box display={{ base: "flex", md: "none" }} px={1}>
                   <PurpleButton
-                    name={<MdFileUpload />}
-                    onClick={handleUploadClick}
+                    name={<FaSignInAlt />}
+                    onClick={handleSignInClick}
                     px={2}
                     py={1}
                   />
                 </Box>
-                <UserMenu user={user} setUser={setUser} />
               </>
-            )
-          ) : (
-            <>
-              <Box display={{ base: "none", md: "flex" }}>
-                <PurpleButton name="Sign In" onClick={handleSignInClick} />
-              </Box>
-              <Box display={{ base: "flex", md: "none" }} px={1}>
-                <PurpleButton
-                  name={<FaSignInAlt />}
-                  onClick={handleSignInClick}
-                  px={2}
-                  py={1}
-                />
-              </Box>
-            </>
-          )}
+            )}
+          </div>
         </Flex>
       </Flex>
       <SignInModal

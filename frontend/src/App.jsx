@@ -12,6 +12,7 @@ import theme from "./theme";
 import "./App.css";
 import ArtDetailPage from "./components/ArtDetailPage";
 import MainGallery from "./components/MainGallery";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Create a context to share the search query across routes
 const SearchQueryContext = createContext();
@@ -27,30 +28,35 @@ export const SearchQueryProvider = ({ children }) => {
 
 export const useSearchQuery = () => useContext(SearchQueryContext);
 
+// Create QueryClient outside component to avoid recreating on each render
+const queryClient = new QueryClient();
+
 function App() {
   return (
-    <GoogleOAuthProvider clientId={import.meta.env.VITE_CLIENT_ID}>
-      <ChakraProvider theme={theme}>
-        <UserProvider>
-          <ColorModeScript initialColorMode={theme.config.initialColorMode} />
-          <SearchQueryProvider>
-            <Router>
-              <Header />
-              <ImageUploadModal />
-              <Box pt={84}>
-                <Routes>
-                  <Route path="/" element={<MainGallery />} />
-                  <Route path="/:id" element={<ArtDetailPage />} />
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/admin" element={<AdminTab />} />
-                  <Route path="/profile" element={<UserProfile />} />
-                </Routes>
-              </Box>
-            </Router>
-          </SearchQueryProvider>
-        </UserProvider>
-      </ChakraProvider>
-    </GoogleOAuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <GoogleOAuthProvider clientId={import.meta.env.VITE_CLIENT_ID}>
+        <ChakraProvider theme={theme}>
+          <UserProvider>
+            <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+            <SearchQueryProvider>
+              <Router>
+                <Header />
+                <ImageUploadModal />
+                <Box pt={84}>
+                  <Routes>
+                    <Route path="/" element={<MainGallery />} />
+                    <Route path="/:id" element={<ArtDetailPage />} />
+                    <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/admin" element={<AdminTab />} />
+                    <Route path="/profile" element={<UserProfile />} />
+                  </Routes>
+                </Box>
+              </Router>
+            </SearchQueryProvider>
+          </UserProvider>
+        </ChakraProvider>
+      </GoogleOAuthProvider>
+    </QueryClientProvider>
   );
 }
 
