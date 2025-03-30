@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Box,
   Avatar,
@@ -10,11 +10,15 @@ import {
 import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
 import { useParams } from "react-router-dom";
+import { useUser } from "../contexts/UserContext";
+import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
 //import { useAuthRedirect } from "../hooks/useAuthRedirect";
 
 const UserProfile = () => {
   const { id } = useParams(); // Extract id from URL
   const [user, setUser] = useState(null);
+  const { user: currentUser } = useUser();
+  const prevUserRef = useRef(null);
   //useAuthRedirect();
 
   const textColor = useColorModeValue("gray.800", "white");
@@ -22,16 +26,44 @@ const UserProfile = () => {
   const fetchArts = useCallback(async () => {
     if (id) {
       const pathKey = `profile-${id}`;
-      const storedArts = sessionStorage.getItem(`arts-${pathKey}`);
+      const storageKey = `arts-${pathKey}`;
 
-      if (storedArts) {
-        return;
+      // Check if user has changed and we need to update likes
+      if (
+        currentUser?.id !== prevUserRef.current?.id &&
+        sessionStorage.getItem(storageKey)
+      ) {
+        const artIds = extractStoredArtIds(storageKey);
+
+        if (artIds.length > 0) {
+          const updatedArts = await fetchBatchArtData(
+            artIds,
+            currentUser,
+            pathKey
+          );
+
+          if (updatedArts) {
+            sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
+          }
+        }
       }
 
-      const data = await fetchAPI(`/arts/${id}`, "GET");
-      sessionStorage.setItem(`arts-${pathKey}`, JSON.stringify(data));
+      // Update previous user reference
+      prevUserRef.current = currentUser;
+
+      // If we don't have data in session storage, fetch it
+      if (!sessionStorage.getItem(storageKey)) {
+        const endpoint = `/arts/${id}${
+          currentUser?.id ? `?viewer_id=${currentUser.id}` : ""
+        }`;
+        const data = await fetchAPI(endpoint, "GET");
+        sessionStorage.setItem(storageKey, JSON.stringify(data));
+
+        // Store current user ID
+        localStorage.setItem(`${storageKey}-user`, currentUser?.id || "null");
+      }
     }
-  }, [id]);
+  }, [id, currentUser]);
 
   useEffect(() => {
     const fetchUser = async () => {

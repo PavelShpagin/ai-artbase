@@ -12,6 +12,259 @@ import { Spinner, Box, Text } from "@chakra-ui/react";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
 import { useUser } from "../contexts/UserContext";
+import { GoDownload } from "react-icons/go";
+import Heart from "react-heart";
+import fetchAPI from "../services/api";
+
+// Create a separate component for image rendering
+const ImageItem = ({ photo, left, top, onClick }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isActionHovered, setIsActionHovered] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+  const { user } = useUser();
+
+  // Compute combined hover state
+  const showOverlay = isHovered || isActionHovered;
+
+  // Check if the image is liked on mount
+  useEffect(() => {
+    // For authorized users, first check the liked_by_user from API
+    if (user?.id) {
+      setIsLiked(
+        photo.liked_by_user ||
+          localStorage.getItem(`like-${photo.id}`) === "true"
+      );
+    } else {
+      // For unauthorized users, only check localStorage
+      setIsLiked(localStorage.getItem(`like-${photo.id}`) === "true");
+    }
+  }, [photo.id, photo.liked_by_user, user]);
+
+  // Handle like/unlike - Fixed by ensuring event exists and using optional chaining
+  const handleLike = async (e) => {
+    e?.stopPropagation?.(); // Use optional chaining to safely access stopPropagation
+
+    try {
+      const endpoint = isLiked
+        ? `/arts/unlike/${photo.id}`
+        : `/arts/like/${photo.id}`;
+
+      // Change from params object to query string
+      const queryString = user?.id ? `?user_id=${user.id}` : "";
+
+      console.log("endpoint", `${endpoint}${queryString}`);
+
+      await fetchAPI(`${endpoint}${queryString}`, "POST");
+
+      // Update localStorage
+      if (!isLiked) {
+        localStorage.setItem(`like-${photo.id}`, "true");
+      } else {
+        localStorage.removeItem(`like-${photo.id}`);
+      }
+
+      setIsLiked(!isLiked);
+    } catch (error) {
+      console.error("Error toggling like:", error);
+    }
+  };
+
+  // Handle download
+  const handleDownload = async (e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+
+    try {
+      const response = await fetch(photo.src);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+      const blob = await response.blob();
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `image-${photo.id}.jpg`;
+
+      document.body.appendChild(link);
+      link.click();
+
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error("Error downloading the image:", error);
+    }
+  };
+
+  const getPromptLength = () => {
+    if (window.innerWidth >= 1280 + 35) {
+      return Math.max(Math.floor(window.innerWidth / 30) - 30, 0); // xl screens
+    } else if (window.innerWidth >= 1024 + 35) {
+      return Math.max(Math.floor(window.innerWidth / 20) - 42, 0); // lg screens
+    } else if (window.innerWidth >= 768 + 35) {
+      return Math.max(Math.floor(window.innerWidth / 18) - 40, 0); // md screens
+    } else if (window.innerWidth >= 512 + 35) {
+      return Math.max(Math.floor(window.innerWidth / 16) - 28, 0); // md screens
+    } else {
+      return Math.max(Math.floor(window.innerWidth / 16) - 12, 0); // default
+    }
+  };
+
+  const displayPrompt = photo.prompt
+    ? photo.prompt.length > getPromptLength()
+      ? photo.prompt
+          .substring(0, getPromptLength())
+          .trim()
+          .replace(/\.*$/, "") + "..."
+      : photo.prompt.trim()
+    : "...";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left,
+        top,
+        width: photo.width,
+        height: photo.height,
+        background: "rgb(229, 231, 235)",
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <OptimizedImage
+        src={photo.src}
+        alt=""
+        width={photo.width}
+        height={photo.height}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
+          borderRadius: "8px",
+        }}
+        loading="lazy"
+        onLoad={(e) => {
+          e.target.style.opacity = 1;
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick(e, { photo });
+        }}
+      />
+
+      {/* Full image gray overlay */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: "rgba(0, 0, 0, 0.09)", // Solid gray with 30% opacity
+          borderRadius: "8px",
+          pointerEvents: "none",
+          opacity: showOverlay ? 1 : 0,
+          transition: "opacity 0.05s ease-in-out",
+        }}
+      />
+
+      {/* Always render the overlay, but control its opacity based on hover state */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "60px",
+          background:
+            "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)",
+          borderBottomLeftRadius: "8px",
+          borderBottomRightRadius: "8px",
+          pointerEvents: "none",
+          opacity: showOverlay ? 1 : 0,
+          transition: "opacity 0.05s ease-in-out",
+        }}
+      />
+
+      {/* Always render the text and buttons, but control visibility with opacity */}
+      <Text
+        position="absolute"
+        bottom="12px"
+        left="10px"
+        fontSize="sm"
+        fontWeight="medium"
+        color="white"
+        maxWidth="70%"
+        isTruncated
+        pointerEvents="none"
+        opacity={showOverlay ? 1 : 0}
+        transition="opacity 0.05s ease-in-out"
+      >
+        {displayPrompt}
+      </Text>
+
+      {/* Icons container */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "10px",
+          right: "10px",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          zIndex: 10,
+          opacity: showOverlay ? 1 : 0,
+          transition: "opacity 0.05s ease-in-out",
+        }}
+        onMouseEnter={() => setIsActionHovered(true)}
+        onMouseLeave={() => setIsActionHovered(false)}
+      >
+        {/* Download icon */}
+        <Box
+          as="button"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          w="24px"
+          h="24px"
+          style={{
+            color: "rgba(255, 255, 255, 0.8)",
+            transition: "transform 0.05s ease-in-out",
+          }}
+          _hover={{
+            transform: "scale(1.1)",
+            color: "white",
+          }}
+          onClick={handleDownload}
+        >
+          <GoDownload size={22} />
+        </Box>
+
+        {/* Heart icon */}
+        <Box
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          w="24px"
+          h="24px"
+        >
+          <Heart
+            isActive={isLiked}
+            onClick={handleLike}
+            animationTrigger="both"
+            animationScale={1.1}
+            style={{ width: "100%", height: "100%" }}
+            inactiveColor="rgba(255, 255, 255, 0.8)"
+            activeColor="#e53e3e"
+          />
+        </Box>
+      </div>
+    </div>
+  );
+};
 
 export const ArtGallery = ({ fetchArts, setArt }) => {
   const navigate = useNavigate();
@@ -49,10 +302,14 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       const id = location.pathname.split("/")[2];
       return `profile-${id}`;
     }
+    if (location.pathname.startsWith("/liked")) {
+      const id = location.pathname.split("/")[2];
+      return `liked-${id}`;
+    }
     return location.pathname === "/"
       ? `main-${searchQuery}`
       : `detail-${location.pathname}`;
-  }, [location.pathname, searchQuery, user]);
+  }, [location.pathname, searchQuery]);
 
   const prevGetPathKeyRef = useRef(null);
   const prevFetchArtsRef = useRef(null);
@@ -62,6 +319,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       prevGetPathKeyRef.current !== getPathKey &&
       prevFetchArtsRef.current !== fetchArts
     ) {
+      console.log("CLEANING");
       prevGetPathKeyRef.current = getPathKey;
       prevFetchArtsRef.current = fetchArts;
       window.removeEventListener("scroll", handleScroll);
@@ -80,7 +338,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         stageInitialRenderComplete: false,
       });
     }
-  }, [getPathKey, fetchArts, searchQuery]); // Add searchQuery to dependencies
+  }, [getPathKey, fetchArts]); // Add searchQuery to dependencies
 
   // STAGE 1A: Cleaning
   useLayoutEffect(() => {
@@ -198,6 +456,8 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         height: parseFloat(img.height) || 1,
         alt: img.title || "Gallery image",
         title: img.title || "Untitled",
+        prompt: img.prompt || "",
+        liked_by_user: img.liked_by_user || false,
       }));
 
       if (location.pathname !== currentPathRef.current) return;
@@ -243,6 +503,8 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
               height: parseFloat(img.height) || 1,
               alt: img.title || "Gallery image",
               title: img.title || "Untitled",
+              prompt: img.prompt || "",
+              liked_by_user: img.liked_by_user || false,
             }));
 
             const pathKey = getPathKey();
@@ -335,54 +597,18 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     navigate(`/${photo.id}`, { state: { photo } });
   };
 
-  // Custom renderer for images
-  const imageRenderer = ({ index, left, top, key, photo }) => (
-    <div
-      key={`${key}-${index}`}
-      style={{
-        position: "absolute",
-        left,
-        top,
-        width: photo.width,
-        height: photo.height,
-        background: "rgb(229, 231, 235)",
-        borderRadius: "8px",
-        overflow: "hidden",
-      }}
-    >
-      <OptimizedImage
-        src={photo.src}
-        alt=""
-        width={photo.width}
-        height={photo.height}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          display: "block",
-          borderRadius: "8px",
-        }}
-        loading="lazy"
-        onLoad={(e) => {
-          e.target.style.opacity = 1;
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleClick(e, { photo });
-        }}
+  // Custom renderer for images - now uses our separate component
+  const imageRenderer = ({ index, left, top, key, photo }) => {
+    return (
+      <ImageItem
+        key={`${key}-${index}`}
+        photo={photo}
+        left={left}
+        top={top}
+        onClick={handleClick}
       />
-    </div>
-  );
-
-  useEffect(() => {
-    console.log("!!!visibleArts", visibleArts);
-    console.log("!!!arts", arts);
-  }, [visibleArts, arts]);
-
-  useEffect(() => {
-    console.log("------arts", arts);
-    console.log("------stageStatus", stageStatus);
-  }, [stageStatus, arts]);
+    );
+  };
 
   return (
     <>
@@ -408,6 +634,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
               columns={(containerWidth) => {
                 if (containerWidth >= 1280) return 6; // xl
                 if (containerWidth >= 1024) return 5; // lg
+                if (containerWidth >= 768) return 4; // md
                 if (containerWidth >= 512) return 3; // md
                 return 2; // default
               }}

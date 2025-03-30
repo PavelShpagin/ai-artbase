@@ -49,9 +49,9 @@ p {
   cursor: pointer;
 }
 
-.react-photo-gallery--gallery img:hover {
+/* .react-photo-gallery--gallery img:hover {
   filter: brightness(90%);
-}
+} */
 
 .react-photo-gallery--gallery {
   padding-top: 5px;

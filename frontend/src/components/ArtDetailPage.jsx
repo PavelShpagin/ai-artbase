@@ -20,6 +20,8 @@ import fetchAPI from "../services/api";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
 import { Spinner } from "@chakra-ui/react";
+import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
+import { useUser } from "../contexts/UserContext";
 
 const ArtDetailPage = () => {
   const { searchQuery } = useSearchQuery();
@@ -28,6 +30,8 @@ const ArtDetailPage = () => {
   const [art, setArt] = useState(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const prevSearchQueryRef = useRef(searchQuery);
+  const { user } = useUser();
+  const prevUserRef = useRef(null);
 
   const [isReady, setIsReady] = useState(false);
 
@@ -41,21 +45,52 @@ const ArtDetailPage = () => {
 
   const fetchSimilarArts = useCallback(async () => {
     try {
-      const endpoint = `/arts/similar${location.pathname}`;
-      if (!sessionStorage.getItem(`arts-detail-${location.pathname}`)) {
+      const storageKey = `arts-detail-${location.pathname}`;
+
+      // Check if user has changed and we need to update likes
+      if (
+        user?.id !== prevUserRef.current?.id &&
+        sessionStorage.getItem(storageKey)
+      ) {
+        const artIds = extractStoredArtIds(storageKey);
+
+        if (artIds.length > 0) {
+          const updatedArts = await fetchBatchArtData(
+            artIds,
+            user,
+            `detail-${location.pathname}`
+          );
+
+          if (updatedArts) {
+            sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
+          }
+        }
+      }
+
+      // Update previous user reference
+      prevUserRef.current = user;
+
+      // Continue with normal fetch if data isn't in session storage
+      if (!sessionStorage.getItem(storageKey)) {
+        const endpoint = `/arts/similar${location.pathname}${
+          user?.id ? `?viewer_id=${user.id}` : ""
+        }`;
         const response = await fetchAPI(endpoint);
         const filteredResponse = response.filter(
           (image) => image.id !== parseInt(location.pathname.substring(1))
         );
-        sessionStorage.setItem(
-          `arts-detail-${location.pathname}`,
-          JSON.stringify(filteredResponse)
+        sessionStorage.setItem(storageKey, JSON.stringify(filteredResponse));
+
+        // Store current user ID
+        localStorage.setItem(
+          `arts-detail-${location.pathname}-user`,
+          user?.id || "null"
         );
       }
     } catch (error) {
       console.error("Failed to fetch similar arts: " + error.message);
     }
-  }, [location.pathname]);
+  }, [location.pathname, user]);
 
   useLayoutEffect(() => {
     const fetchArt = async () => {
@@ -68,23 +103,54 @@ const ArtDetailPage = () => {
         return;
       }
       if (!sessionStorage.getItem(`art-showcase-${location.pathname}`)) {
-        const response = await fetchAPI(`/arts/id${location.pathname}`);
+        const endpoint = `/arts/id${location.pathname}${
+          user?.id ? `?viewer_id=${user.id}` : ""
+        }`;
+        const response = await fetchAPI(endpoint);
         sessionStorage.setItem(
           `art-showcase-${location.pathname}`,
           JSON.stringify(response)
         );
+
+        // Store current user ID
+        localStorage.setItem(
+          `art-showcase-${location.pathname}-user`,
+          user?.id || "null"
+        );
         setArt(response);
       } else {
-        setArt(
-          JSON.parse(
-            sessionStorage.getItem(`art-showcase-${location.pathname}`)
-          )
-        );
+        // Check if user changed and we need to update like status
+        const showcaseKey = `art-showcase-${location.pathname}`;
+        const storedUserId = localStorage.getItem(`${showcaseKey}-user`);
+
+        if (storedUserId !== String(user?.id || "null")) {
+          const artData = JSON.parse(sessionStorage.getItem(showcaseKey));
+
+          if (artData?.id) {
+            const updatedArt = await fetchBatchArtData(
+              [artData.id],
+              user,
+              `showcase-${location.pathname}`
+            );
+
+            if (updatedArt && updatedArt.length > 0) {
+              sessionStorage.setItem(
+                showcaseKey,
+                JSON.stringify(updatedArt[0])
+              );
+              setArt(updatedArt[0]);
+              return;
+            }
+          }
+        }
+
+        setArt(JSON.parse(sessionStorage.getItem(showcaseKey)));
       }
     };
+
     setArt(null);
     fetchArt();
-  }, [location.pathname]);
+  }, [location.pathname, user]);
 
   // Close modal when location changes
   useEffect(() => {

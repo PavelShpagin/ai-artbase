@@ -73,6 +73,11 @@ const UserMenu = ({ onSignOut }) => {
     localStorage.setItem("token", "");
   };
 
+  const handleLikedCLick = () => {
+    onClose();
+    navigate("/liked");
+  };
+
   const handleAnalyticsClick = () => {
     onClose();
     navigate("/analytics");
@@ -111,7 +116,9 @@ const UserMenu = ({ onSignOut }) => {
           Profile
         </MenuItem>
         {/*<MenuItem icon={<MdHistory />}>History</MenuItem>*/}
-        {/*<MenuItem icon={<FiHeart />}>Liked</MenuItem>*/}
+        <MenuItem icon={<FiHeart />} onClick={handleLikedCLick}>
+          Liked
+        </MenuItem>
         <MenuItem icon={<FiBarChart2 />} onClick={handleAnalyticsClick}>
           Analytics
         </MenuItem>

@@ -9,11 +9,15 @@ import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
 import { useSearchQuery } from "../App";
 import { useLocation } from "react-router-dom";
+import { useUser } from "../contexts/UserContext";
+import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
 
 const MainGallery = () => {
   const { searchQuery, setSearchQuery } = useSearchQuery();
+  const { user } = useUser();
   const prevSearchQueryRef = useRef(searchQuery);
   const location = useLocation();
+  const prevUserRef = useRef(user);
 
   useLayoutEffect(() => {
     const handlePopState = (e) => {
@@ -27,6 +31,8 @@ const MainGallery = () => {
 
   const cachedFetchArts = useCallback(async () => {
     try {
+      console.log("user changed");
+
       if (prevSearchQueryRef.current.length === 0 && searchQuery.length === 1) {
         window.history.pushState({ state: searchQuery }, "", "/");
       } else if (
@@ -40,23 +46,65 @@ const MainGallery = () => {
 
       prevSearchQueryRef.current = searchQuery;
 
-      if (sessionStorage.getItem(`arts-main-${searchQuery}`)) {
+      const storageKey = `arts-main-${searchQuery}`;
+
+      // Check if we need to update likes information due to user change
+      if (
+        user?.id !== prevUserRef.current?.id &&
+        sessionStorage.getItem(storageKey)
+      ) {
+        // Extract art IDs from stored data
+        const artIds = extractStoredArtIds(storageKey);
+
+        if (artIds.length > 0) {
+          // Fetch updated art data with correct liked_by_user information
+          const updatedArts = await fetchBatchArtData(
+            artIds,
+            user,
+            `main-${searchQuery}`
+          );
+
+          if (updatedArts) {
+            // Update session storage with new data
+            sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
+          }
+        }
+      }
+
+      // Update previous user reference
+      prevUserRef.current = user;
+
+      // If we already have the data in session storage, return
+      if (sessionStorage.getItem(storageKey)) {
         return;
       }
 
-      const endpoint = searchQuery
+      // Otherwise fetch new data
+      let endpoint = searchQuery
         ? `/search/?query=${encodeURIComponent(searchQuery)}`
         : "/arts/";
 
+      if (user?.id) {
+        endpoint += `${endpoint.includes("?") ? "&" : "?"}viewer_id=${user.id}`;
+      }
+
       const response = await fetchAPI(endpoint);
-      sessionStorage.setItem(
-        `arts-main-${searchQuery}`,
-        JSON.stringify(response)
-      );
+      sessionStorage.setItem(storageKey, JSON.stringify(response));
+
+      // Store the current user ID associated with this data
+      localStorage.setItem(`arts-main-${searchQuery}-user`, user?.id || "null");
     } catch (error) {
       console.error("Failed to fetch arts: " + error.message);
     }
-  }, [searchQuery]);
+  }, [searchQuery, user]);
+
+  useEffect(() => {
+    console.log("!!!user changed");
+  }, [user]);
+
+  useEffect(() => {
+    console.log("!!!fetchArts changed");
+  }, [cachedFetchArts]);
 
   return <ArtGallery fetchArts={cachedFetchArts} />;
 };
