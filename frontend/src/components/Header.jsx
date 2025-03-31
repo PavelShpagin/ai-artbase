@@ -292,7 +292,14 @@ const Header = () => {
                       variant="outline"
                       borderRadius="full"
                       onClick={() => {
-                        // Will implement filtering later
+                        setSearchQuery(category.name);
+                        navigate(
+                          `/?search=${encodeURIComponent(category.name)}`,
+                          {
+                            replace: false,
+                            state: { searchQuery: category.name },
+                          }
+                        );
                         setIsFilterOpen(false);
                       }}
                     >
