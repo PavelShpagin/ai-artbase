@@ -63,10 +63,12 @@ const useArtLikes = (artId, user, initialLikedStatus = false) => {
         // Add user_id to query if logged in
         const queryString = user?.id ? `?user_id=${user.id}` : "";
 
+        console.log("endpoint", endpoint);
         // Call API to update like status
         await fetchAPI(`${endpoint}${queryString}`, "POST");
 
         if (user?.id) {
+          // console.log("UPDATE ALL");
           // For logged-in users, update all instances in sessionStorage
           updateAllArtInstancesInStorage(artId, user.id, newLikedState);
         } else {
@@ -100,7 +102,11 @@ function updateAllArtInstancesInStorage(artId, userId, isLiked) {
   // Then update all places where this art appears in collections
   for (let i = 0; i < sessionStorage.length; i++) {
     const key = sessionStorage.key(i);
-    if (key.startsWith("arts-")) {
+    if (
+      key.startsWith("arts-") ||
+      key.startsWith("visibleArts-") ||
+      key.startsWith("art-")
+    ) {
       try {
         const storedArts = JSON.parse(sessionStorage.getItem(key));
         if (Array.isArray(storedArts)) {

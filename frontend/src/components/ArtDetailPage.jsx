@@ -12,16 +12,24 @@ import {
   ModalOverlay,
   ModalContent,
   useDisclosure,
+  Flex,
+  Text,
+  Spinner,
+  Icon,
+  useToast,
 } from "@chakra-ui/react";
+import { IoArrowBackOutline } from "react-icons/io5";
+import { GoDownload } from "react-icons/go";
+import Heart from "react-heart";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
-import { Spinner } from "@chakra-ui/react";
 import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
 import { useUser } from "../contexts/UserContext";
+import useArtLikes from "../hooks/useArtLikes";
 
 const ArtDetailPage = () => {
   const { searchQuery } = useSearchQuery();
@@ -31,8 +39,28 @@ const ArtDetailPage = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user } = useUser();
   const prevUserRef = useRef(null);
+  const [showFullPrompt, setShowFullPrompt] = useState(false);
+  const toast = useToast();
+  const imageContainerRef = useRef(null);
 
-  const [isReady, setIsReady] = useState(false);
+  // Initialize isLiked and toggleLike
+  const [isLiked, setIsLiked] = useState(false);
+  const [toggleLikeFunction, setToggleLikeFunction] = useState(() => () => {});
+
+  // Use the hook properly without conditional execution
+  const artLikesHook = useArtLikes(
+    art?.id || 0,
+    user,
+    art?.liked_by_user || false
+  );
+
+  // Update the local state when art is loaded
+  useEffect(() => {
+    if (art?.id) {
+      setIsLiked(artLikesHook[0]);
+      setToggleLikeFunction(() => artLikesHook[1]);
+    }
+  }, [art, artLikesHook]);
 
   const fetchSimilarArts = useCallback(async () => {
     try {
@@ -161,11 +189,107 @@ const ArtDetailPage = () => {
   }, [location]);
 
   // Function to go back
-  const goBack = () => {
+  const goBack = (e) => {
+    // e.stopPropagation();
+    //e.preventDefault();
     navigate(-1);
   };
 
-  //if (!art) return null;
+  // Handle download
+  const handleDownload = async (e) => {
+    e?.stopPropagation();
+    e?.preventDefault();
+
+    if (!art?.src) return;
+
+    try {
+      const response = await fetch(art.src);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+      const blob = await response.blob();
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `image-${art.id}.jpg`;
+
+      document.body.appendChild(link);
+      link.click();
+
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error("Error downloading the image:", error);
+      toast({
+        title: "Download Failed",
+        description: "Error downloading the image. Please try again.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+        position: "top",
+      });
+    }
+  };
+
+  // Format prompt into exactly 3 lines
+  const getFormattedPrompt = (prompt) => {
+    if (!prompt) return "No prompt available";
+
+    // Split the prompt into words
+    const words = prompt.replace(/[\n\r]/g, " ").split(" ");
+    const totalWords = words.length;
+
+    // Calculate how many words per line (approximately)
+    const wordsPerLine = Math.ceil(totalWords / 3);
+
+    // Create the three lines
+    const lines = [];
+    for (let i = 0; i < 3; i++) {
+      const start = i * wordsPerLine;
+      const end = Math.min(start + wordsPerLine, totalWords);
+      if (start < totalWords) {
+        lines.push(words.slice(start, end).join(" "));
+      } else {
+        lines.push("");
+      }
+    }
+
+    return lines.join("\n") + "...";
+  };
+
+  // Copy prompt to clipboard
+  const copyPromptToClipboard = (e) => {
+    e.stopPropagation();
+    if (!art?.prompt) return;
+
+    navigator.clipboard
+      .writeText(art.prompt)
+      .then(() => {
+        toast({
+          title: "Copied to clipboard",
+          status: "success",
+          duration: 2000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to copy: ", err);
+        toast({
+          title: "Failed to copy",
+          status: "error",
+          duration: 2000,
+          isClosable: true,
+          position: "top",
+        });
+      });
+  };
+
+  // Handle image click
+  const handleImageClick = (e) => {
+    e.stopPropagation(); // Prevent the click from bubbling up
+    onOpen();
+  };
 
   return (
     <>
@@ -178,50 +302,165 @@ const ArtDetailPage = () => {
         cursor="pointer"
       >
         <Box
-          bg="gray.150"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          height={{ base: "50vh", md: "80vh" }}
+          //position="relative"
           width="fit-content"
+          height={{ base: "70vh", md: "80vh" }}
           maxWidth="80vw"
+          borderRadius="lg"
+          // overflow="hidden"
+          display="flex"
+          // justifyContent="center"
+          alignItems="center"
+          //ref={imageContainerRef}
+          // onClick={handleImageClick} Prevent clicks on the image container from triggering the back navigation
         >
           {art ? (
-            <OptimizedImage
-              src={art.src}
-              objectFit="cover"
-              borderRadius="lg"
-              maxHeight="100%"
-              boxShadow="2xl"
-              cursor="zoom-in"
-              onClick={(e) => {
-                e.stopPropagation(); // Prevents the VStack onClick from firing
-                onOpen();
-              }}
-            />
+            <>
+              <Box position="relative" width="auto" maxWidth="100%">
+                <Box position="relative">
+                  {/* Back button positioned on the image */}
+                  <Box
+                    position="absolute"
+                    top="4"
+                    left="4"
+                    zIndex="10"
+                    as="button"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    bg="rgba(0,0,0,0.3)"
+                    color="white"
+                    p={2}
+                    borderRadius="full"
+                    transition="all 0.2s"
+                    _hover={{
+                      transform: "scale(1.1)",
+                      bg: "rgba(0,0,0,0.5)",
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goBack();
+                    }}
+                  >
+                    <IoArrowBackOutline size={22} />
+                  </Box>
+
+                  <OptimizedImage
+                    src={art.src}
+                    objectFit="contain"
+                    maxHeight={{ base: "60vh", md: "80vh" }}
+                    cursor="zoom-in"
+                    borderRadius="lg"
+                    onClick={handleImageClick}
+                  />
+                </Box>
+
+                {/* Gradient overlay at the bottom */}
+                <Box
+                  position="absolute"
+                  bottom="0"
+                  left="0"
+                  right="0"
+                  height={{ base: "25%", md: "20%" }}
+                  background="linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)"
+                  borderBottomLeftRadius="lg"
+                  borderBottomRightRadius="lg"
+                  padding="16px"
+                  display="flex"
+                  flexDirection="row"
+                  alignItems="flex-end"
+                  justifyContent="space-between"
+                  onClick={handleImageClick}
+                >
+                  {/* Prompt text */}
+                  <Text
+                    color="white"
+                    fontSize={{ base: "sm", md: "md" }}
+                    fontWeight="medium"
+                    maxWidth="70%"
+                    whiteSpace="pre-line"
+                    cursor="pointer"
+                    transition="all 0.2s"
+                    _hover={{ opacity: 0.8 }}
+                    onClick={copyPromptToClipboard}
+                    noOfLines={3}
+                    overflow="hidden"
+                    textOverflow="ellipsis"
+                  >
+                    {art.prompt
+                      ? getFormattedPrompt(art.prompt)
+                      : "No prompt available"}
+                  </Text>
+
+                  {/* Action buttons */}
+                  <Flex align="center" gap={4}>
+                    <Box
+                      as="button"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      color="rgba(255, 255, 255, 0.9)"
+                      transition="all 0.2s"
+                      _hover={{
+                        transform: "scale(1.1)",
+                        color: "white",
+                      }}
+                      onClick={handleDownload}
+                    >
+                      <GoDownload size={24} />
+                    </Box>
+
+                    <Box
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      w="28px"
+                      h="28px"
+                      onClick={(e) => e.stopPropagation()} // Prevent modal from opening
+                    >
+                      <Heart
+                        isActive={isLiked}
+                        onClick={toggleLikeFunction}
+                        animationTrigger="both"
+                        animationScale={1.2}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                        }}
+                        inactiveColor="rgba(255, 255, 255, 0.9)"
+                        activeColor="#e53e3e"
+                      />
+                    </Box>
+                  </Flex>
+                </Box>
+              </Box>
+            </>
           ) : (
             <Box display="flex" justifyContent="center" py={4} width="100%">
               <Spinner size="md" thickness="4px" color="gray.200" />
             </Box>
           )}
         </Box>
+
         <Modal
           isOpen={isOpen}
           onClose={onClose}
           size="full"
-          cursor="pointer"
           isCentered
+          //onOverlayClick={onClose}
+          blockScrollOnMount={true}
         >
           <ModalOverlay />
           <ModalContent
             cursor="zoom-out"
             onClick={(e) => {
-              e.stopPropagation(); // Prevents the VStack onClick from firing
+              e.stopPropagation(); // Stop event from reaching the parent
               onClose();
             }}
             display="flex"
             alignItems="center"
             justifyContent="center"
+            // bg="rgba(0, 0, 0, 0.9)"
           >
             {art && (
               <OptimizedImage
@@ -229,6 +468,7 @@ const ArtDetailPage = () => {
                 objectFit="contain"
                 maxH="100vh"
                 maxW="100vw"
+                // borderRadius="lg"
               />
             )}
           </ModalContent>

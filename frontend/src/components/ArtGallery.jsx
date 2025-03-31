@@ -8,7 +8,7 @@ import React, {
 import Gallery from "react-photo-gallery";
 import { useNavigate, useLocation, useNavigationType } from "react-router-dom";
 // import { Box } from "@mui/material";
-import { Spinner, Box, Text } from "@chakra-ui/react";
+import { Spinner, Box, Text, useToast } from "@chakra-ui/react";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
 import { useUser } from "../contexts/UserContext";
@@ -22,6 +22,7 @@ const ImageItem = ({ photo, left, top, onClick, getPathKey }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionHovered, setIsActionHovered] = useState(false);
   const { user } = useUser();
+  const toast = useToast();
 
   // Use the updated hook to manage liked state
   const [isLiked, toggleLike] = useArtLikes(
@@ -56,6 +57,14 @@ const ImageItem = ({ photo, left, top, onClick, getPathKey }) => {
       URL.revokeObjectURL(link.href);
     } catch (error) {
       console.error("Error downloading the image:", error);
+      toast({
+        title: "Download failed",
+        description: "Error downloading the image. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+        position: "top",
+      });
     }
   };
 
