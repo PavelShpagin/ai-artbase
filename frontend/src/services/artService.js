@@ -13,7 +13,7 @@ export const fetchBatchArtData = async (artIds, user, pageKey) => {
   // Get the user ID associated with the stored arts
   const storedUserKey = `arts-${pageKey}-user`;
   const storedUserId = localStorage.getItem(storedUserKey);
-  const currentUserId = user?.id || null;
+  const currentUserId = user?.id || "null";
 
   // If user hasn't changed and we already have data, just return it
   if (storedUserId === String(currentUserId)) {
@@ -22,13 +22,34 @@ export const fetchBatchArtData = async (artIds, user, pageKey) => {
 
   // If user has changed, fetch updated data with correct liked_by_user flags
   try {
-    const response = await fetchAPI("/arts/batch/", "POST", {
-      art_ids: artIds,
-      viewer_id: currentUserId,
-    });
+    const response = await fetchAPI(
+      currentUserId !== "null"
+        ? `/arts/batch/?viewer_id=${currentUserId}`
+        : `/arts/batch/`,
+      "POST",
+      JSON.stringify({
+        art_ids: artIds,
+      }),
+      {
+        "Content-Type": "application/json",
+      }
+    );
 
     // Update the stored user ID after successful fetch
     localStorage.setItem(storedUserKey, String(currentUserId));
+
+    // if (response && Array.isArray(response)) {
+    //   if (user?.id) {
+    //     // For logged-in users, update session storage for each art
+    //     response.forEach((art) => {
+    //       const likeKey = `art-like-${art.id}-${user.id}`;
+    //       sessionStorage.setItem(likeKey, JSON.stringify(art.liked_by_user));
+    //     });
+    //   } else {
+    //     // For guests, don't override localStorage likes
+    //     // We'll use the existing localStorage values in the useArtLikes hook
+    //   }
+    // }
 
     return response;
   } catch (error) {

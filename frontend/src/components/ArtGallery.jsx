@@ -15,59 +15,23 @@ import { useUser } from "../contexts/UserContext";
 import { GoDownload } from "react-icons/go";
 import Heart from "react-heart";
 import fetchAPI from "../services/api";
+import useArtLikes from "../hooks/useArtLikes";
 
 // Create a separate component for image rendering
-const ImageItem = ({ photo, left, top, onClick }) => {
+const ImageItem = ({ photo, left, top, onClick, getPathKey }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionHovered, setIsActionHovered] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
   const { user } = useUser();
+
+  // Use the updated hook to manage liked state
+  const [isLiked, toggleLike] = useArtLikes(
+    photo.id,
+    user,
+    photo.liked_by_user
+  );
 
   // Compute combined hover state
   const showOverlay = isHovered || isActionHovered;
-
-  // Check if the image is liked on mount
-  useEffect(() => {
-    // For authorized users, first check the liked_by_user from API
-    if (user?.id) {
-      setIsLiked(
-        photo.liked_by_user ||
-          localStorage.getItem(`like-${photo.id}`) === "true"
-      );
-    } else {
-      // For unauthorized users, only check localStorage
-      setIsLiked(localStorage.getItem(`like-${photo.id}`) === "true");
-    }
-  }, [photo.id, photo.liked_by_user, user]);
-
-  // Handle like/unlike - Fixed by ensuring event exists and using optional chaining
-  const handleLike = async (e) => {
-    e?.stopPropagation?.(); // Use optional chaining to safely access stopPropagation
-
-    try {
-      const endpoint = isLiked
-        ? `/arts/unlike/${photo.id}`
-        : `/arts/like/${photo.id}`;
-
-      // Change from params object to query string
-      const queryString = user?.id ? `?user_id=${user.id}` : "";
-
-      console.log("endpoint", `${endpoint}${queryString}`);
-
-      await fetchAPI(`${endpoint}${queryString}`, "POST");
-
-      // Update localStorage
-      if (!isLiked) {
-        localStorage.setItem(`like-${photo.id}`, "true");
-      } else {
-        localStorage.removeItem(`like-${photo.id}`);
-      }
-
-      setIsLiked(!isLiked);
-    } catch (error) {
-      console.error("Error toggling like:", error);
-    }
-  };
 
   // Handle download
   const handleDownload = async (e) => {
@@ -253,7 +217,7 @@ const ImageItem = ({ photo, left, top, onClick }) => {
         >
           <Heart
             isActive={isLiked}
-            onClick={handleLike}
+            onClick={(e) => toggleLike(e)}
             animationTrigger="both"
             animationScale={1.1}
             style={{ width: "100%", height: "100%" }}
@@ -274,6 +238,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   const location = useLocation();
   const { searchQuery } = useSearchQuery();
   const { user } = useUser();
+  const prevUserRef = useRef(user);
   const ITEMS_PER_PAGE = 20;
 
   // Stage states
@@ -303,23 +268,25 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       return `profile-${id}`;
     }
     if (location.pathname.startsWith("/liked")) {
-      const id = location.pathname.split("/")[2];
-      return `liked-${id}`;
+      return `liked-${user?.id}`;
     }
     return location.pathname === "/"
       ? `main-${searchQuery}`
       : `detail-${location.pathname}`;
-  }, [location.pathname, searchQuery]);
+  }, [location.pathname, searchQuery, user?.id]);
 
   const prevGetPathKeyRef = useRef(null);
   const prevFetchArtsRef = useRef(null);
 
   useLayoutEffect(() => {
     if (
-      prevGetPathKeyRef.current !== getPathKey &&
-      prevFetchArtsRef.current !== fetchArts
+      (prevGetPathKeyRef.current !== getPathKey &&
+        prevFetchArtsRef.current !== fetchArts) ||
+      (user !== prevUserRef.current && prevFetchArtsRef.current !== fetchArts)
     ) {
-      console.log("CLEANING");
+      if (user !== prevUserRef.current) {
+        prevUserRef.current = user;
+      }
       prevGetPathKeyRef.current = getPathKey;
       prevFetchArtsRef.current = fetchArts;
       window.removeEventListener("scroll", handleScroll);
@@ -338,24 +305,24 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         stageInitialRenderComplete: false,
       });
     }
-  }, [getPathKey, fetchArts]); // Add searchQuery to dependencies
+  }, [getPathKey, fetchArts, user]); // Add searchQuery to dependencies
 
-  // STAGE 1A: Cleaning
-  useLayoutEffect(() => {
-    if (
-      stageStatus.stageCleaningComplete ||
-      stageStatus.stageFetchingComplete ||
-      stageStatus.stageInitialRenderComplete
-    )
-      return;
-    console.log("START", currentPathRef.current);
-    setArts([]);
-    setPage(0);
-    setVisibleArts([]);
-    setLayoutHeight(0);
-    // Mark cleaning as complete
-    setStageStatus((prev) => ({ ...prev, stageCleaningComplete: true }));
-  }, [stageStatus]);
+  // // STAGE 1A: Cleaning
+  // useLayoutEffect(() => {
+  //   if (
+  //     stageStatus.stageCleaningComplete ||
+  //     stageStatus.stageFetchingComplete ||
+  //     stageStatus.stageInitialRenderComplete
+  //   )
+  //     return;
+  //   console.log("START", currentPathRef.current);
+  //   setArts([]);
+  //   setPage(0);
+  //   setVisibleArts([]);
+  //   setLayoutHeight(0);
+  //   // Mark cleaning as complete
+  //   setStageStatus((prev) => ({ ...prev, stageCleaningComplete: true }));
+  // }, [stageStatus]);
 
   // STAGE 1B: Fetching data
   useLayoutEffect(() => {
@@ -377,9 +344,12 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         }
 
         const pathKey = getPathKey();
+        console.log("!!!pathKey", pathKey);
         const storedArts = JSON.parse(
           sessionStorage.getItem(`arts-${pathKey}`)
         );
+
+        console.log("!!!storedArts", storedArts);
 
         if (storedArts) {
           setArts(storedArts);
@@ -597,7 +567,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     navigate(`/${photo.id}`, { state: { photo } });
   };
 
-  // Custom renderer for images - now uses our separate component
+  // Custom renderer for images - now passes getPathKey to the ImageItem component
   const imageRenderer = ({ index, left, top, key, photo }) => {
     return (
       <ImageItem
@@ -606,6 +576,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         left={left}
         top={top}
         onClick={handleClick}
+        getPathKey={getPathKey}
       />
     );
   };

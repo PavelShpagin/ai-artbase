@@ -31,8 +31,6 @@ const MainGallery = () => {
 
   const cachedFetchArts = useCallback(async () => {
     try {
-      console.log("user changed");
-
       if (prevSearchQueryRef.current.length === 0 && searchQuery.length === 1) {
         window.history.pushState({ state: searchQuery }, "", "/");
       } else if (
@@ -67,6 +65,26 @@ const MainGallery = () => {
           if (updatedArts) {
             // Update session storage with new data
             sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
+            console.log("updatedArts", updatedArts);
+
+            // Update visibleArts in sessionStorage with first batch of updatedArts
+            const visibleArtsKey = `visibleArts-main-${searchQuery}`;
+            const visibleArtsCount = sessionStorage.getItem(visibleArtsKey)
+              ? JSON.parse(sessionStorage.getItem(visibleArtsKey)).length
+              : 0;
+            sessionStorage.setItem(
+              visibleArtsKey,
+              JSON.stringify(updatedArts.slice(0, visibleArtsCount))
+            );
+
+            // // Update individual art like statuses
+            // updatedArts.forEach((art) => {
+            //   const likeKey = `art-like-${art.id}-${user?.id || "guest"}`;
+            //   sessionStorage.setItem(
+            //     likeKey,
+            //     JSON.stringify(art.liked_by_user)
+            //   );
+            // });
           }
         }
       }
@@ -84,27 +102,16 @@ const MainGallery = () => {
         ? `/search/?query=${encodeURIComponent(searchQuery)}`
         : "/arts/";
 
-      if (user?.id) {
-        endpoint += `${endpoint.includes("?") ? "&" : "?"}viewer_id=${user.id}`;
-      }
+      // if (user?.id) {
+      //   endpoint += `${endpoint.includes("?") ? "&" : "?"}viewer_id=${user.id}`;
+      // }
 
       const response = await fetchAPI(endpoint);
       sessionStorage.setItem(storageKey, JSON.stringify(response));
-
-      // Store the current user ID associated with this data
-      localStorage.setItem(`arts-main-${searchQuery}-user`, user?.id || "null");
     } catch (error) {
       console.error("Failed to fetch arts: " + error.message);
     }
   }, [searchQuery, user]);
-
-  useEffect(() => {
-    console.log("!!!user changed");
-  }, [user]);
-
-  useEffect(() => {
-    console.log("!!!fetchArts changed");
-  }, [cachedFetchArts]);
 
   return <ArtGallery fetchArts={cachedFetchArts} />;
 };

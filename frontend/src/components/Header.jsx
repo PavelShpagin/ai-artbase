@@ -135,11 +135,13 @@ const UserMenu = ({ onSignOut }) => {
 const Header = () => {
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const { searchQuery, setSearchQuery } = useSearchQuery();
+  const prevSearchQueryRef = useRef(searchQuery);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user, setUser } = useUser();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const searchBarRef = useRef(null);
   const [modalStyle, setModalStyle] = useState({});
+  const navigate = useNavigate();
 
   // Fetch categories
   const { data: categories } = useQuery({
@@ -178,6 +180,13 @@ const Header = () => {
     }
   }, [isFilterOpen]);
 
+  useEffect(() => {
+    if (prevSearchQueryRef.current !== searchQuery) {
+      navigate("/", { replace: true });
+    }
+    prevSearchQueryRef.current = searchQuery;
+  }, [searchQuery, navigate]);
+
   const handleSignInClick = () => setIsSignInModalOpen(true);
   const handleSignInModalClose = () => setIsSignInModalOpen(false);
 
@@ -210,6 +219,7 @@ const Header = () => {
           onClick={() => {
             setSearchQuery("");
             window.scrollTo(0, 0);
+            sessionStorage.setItem("scrollPosition-main-", "0");
           }}
           to="/"
           style={{ textDecoration: "none" }}

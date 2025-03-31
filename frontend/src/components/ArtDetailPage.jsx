@@ -29,19 +29,10 @@ const ArtDetailPage = () => {
   const navigate = useNavigate();
   const [art, setArt] = useState(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const prevSearchQueryRef = useRef(searchQuery);
   const { user } = useUser();
   const prevUserRef = useRef(null);
 
   const [isReady, setIsReady] = useState(false);
-
-  // Navigate back when search query changes
-  useEffect(() => {
-    if (prevSearchQueryRef.current !== searchQuery) {
-      navigate("/", { replace: true });
-    }
-    prevSearchQueryRef.current = searchQuery;
-  }, [searchQuery, navigate]);
 
   const fetchSimilarArts = useCallback(async () => {
     try {
@@ -62,7 +53,17 @@ const ArtDetailPage = () => {
           );
 
           if (updatedArts) {
+            console.log("updatedArts", updatedArts);
             sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
+            // Update visibleArts in sessionStorage with first batch of updatedArts
+            const visibleArtsKey = `visibleArts-detail-${location.pathname}`;
+            const visibleArtsCount = sessionStorage.getItem(visibleArtsKey)
+              ? JSON.parse(sessionStorage.getItem(visibleArtsKey)).length
+              : 0;
+            sessionStorage.setItem(
+              visibleArtsKey,
+              JSON.stringify(updatedArts.slice(0, visibleArtsCount))
+            );
           }
         }
       }

@@ -2,15 +2,14 @@ import React, { useCallback, useRef } from "react";
 import { Box, Heading, Text, Flex, Icon } from "@chakra-ui/react";
 import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
-import { useSearchQuery } from "../App";
 import { useUser } from "../contexts/UserContext";
 import { FiHeart } from "react-icons/fi";
-import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
+import { useAuthRedirect } from "../hooks/useAuthRedirect";
 
 const LikedPage = () => {
-  const { searchQuery } = useSearchQuery();
   const { user } = useUser();
-  const prevUserRef = useRef(null);
+
+  useAuthRedirect();
 
   // Fetch liked arts for the current user
   const fetchLikedArts = useCallback(async () => {
@@ -32,8 +31,8 @@ const LikedPage = () => {
       const endpoint = `/arts/likes/${user.id}?viewer_id=${user.id}`;
       // Fetch the liked arts
       const response = await fetchAPI(endpoint, "GET");
-
       // Store in session storage
+
       sessionStorage.setItem(storageKey, JSON.stringify(response));
 
       // Store current user ID
@@ -44,7 +43,7 @@ const LikedPage = () => {
   }, [user]);
 
   return (
-    <Box pt="80px" px={{ base: 4, md: 8 }}>
+    <Box pt="15px" px={{ base: 4, md: 8 }}>
       <Flex
         direction="column"
         align="center"

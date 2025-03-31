@@ -44,6 +44,15 @@ const UserProfile = () => {
 
           if (updatedArts) {
             sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
+            // Update visibleArts in sessionStorage with first batch of updatedArts
+            const visibleArtsKey = `visibleArts-profile-${id}`;
+            const visibleArtsCount = sessionStorage.getItem(visibleArtsKey)
+              ? JSON.parse(sessionStorage.getItem(visibleArtsKey)).length
+              : 0;
+            sessionStorage.setItem(
+              visibleArtsKey,
+              JSON.stringify(updatedArts.slice(0, visibleArtsCount))
+            );
           }
         }
       }
