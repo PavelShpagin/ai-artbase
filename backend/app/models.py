@@ -37,8 +37,9 @@ class Art(Base):
     width = Column(Integer)
     height = Column(Integer)
     premium = Column(Boolean, default=False)
-    date = Column(DateTime, default= datetime.utcnow)
+    date = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
+    num_likes = Column(Integer, default=0)
 
     owner = relationship("User", back_populates="arts")
     likes = relationship("Like", back_populates="art")

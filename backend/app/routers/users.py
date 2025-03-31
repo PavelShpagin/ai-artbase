@@ -18,3 +18,11 @@ def update_role(user_id: int = Body(..., embed=True), role: str = Body(..., embe
     db.commit()
     db.refresh(user)
     return user
+
+@router.get('/users/{id}', response_model=schemas.User)
+def read_user(id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == id).first()
+    if user:
+        return user
+    else:
+        raise HTTPException(status_code=404, detail="User not found")

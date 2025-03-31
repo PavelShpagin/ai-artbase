@@ -36,6 +36,8 @@ class Art(ArtBase):
     height: int
     premium: bool
     owner_id: Optional[int] = None
+    num_likes: int
+    liked_by_user: bool = False
 
     class Config:
         orm_mode = True
