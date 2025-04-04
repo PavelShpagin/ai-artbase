@@ -8,7 +8,6 @@ import {
   VStack,
   useColorModeValue,
   Divider,
-  Link,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -16,8 +15,12 @@ import {
   ModalBody,
   ModalCloseButton,
   FormControl,
-  FormLabel,
   Icon,
+  Alert,
+  AlertIcon,
+  AlertDescription,
+  InputGroup,
+  InputLeftElement,
 } from "@chakra-ui/react";
 import { FcGoogle } from "react-icons/fc";
 import PurpleButton from "./Buttons";
@@ -33,6 +36,22 @@ const SignInModal = ({ isOpen, onClose }) => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { user, setUser } = useUser();
+
+  const inputBg = useColorModeValue("gray.100", "gray.700");
+  const inputHoverBg = useColorModeValue("gray.200", "gray.600");
+  const focusBorderColor = useColorModeValue("purple.500", "purple.300");
+  const modalBg = useColorModeValue("white", "gray.800");
+  const secondaryButtonBg = useColorModeValue("gray.100", "gray.700");
+  const secondaryButtonHoverBg = useColorModeValue("gray.200", "gray.600");
+
+  const handleClose = () => {
+    setEmail("");
+    setPassword("");
+    setErrors({ email: "", password: "" });
+    setError("");
+    setLoading(false);
+    onClose();
+  };
 
   const handleGoogleSuccess = async (response) => {
     try {
@@ -55,7 +74,7 @@ const SignInModal = ({ isOpen, onClose }) => {
         Authorization: `Bearer ${data.access_token}`,
       });
       setUser(userData);
-      onClose();
+      handleClose();
     } catch (error) {
       console.error("Error during Google login:", error);
     }
@@ -68,32 +87,42 @@ const SignInModal = ({ isOpen, onClose }) => {
 
   const handleEmailChange = (event) => {
     setEmail(event.target.value);
+    if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
+  };
+
+  const handlePasswordChange = (event) => {
+    setPassword(event.target.value);
+    if (errors.password) setErrors((prev) => ({ ...prev, password: "" }));
   };
 
   const validateEmail = (email) => {
-    return /\S+@\S+\.com/.test(email);
+    return /\S+@\S+\.\S+/.test(email);
   };
 
   const handleSubmit = async () => {
-    let errorFlag = false;
+    let hasError = false;
+    const newErrors = { email: "", password: "" };
+
     if (!email) {
-      setErrors((prev) => ({ ...prev, email: "Fill in your email" }));
-      errorFlag = true;
+      newErrors.email = "Email is required";
+      hasError = true;
     } else if (!validateEmail(email)) {
-      setErrors((prev) => ({ ...prev, email: "Invalid email" }));
-      errorFlag = true;
-    } else {
-      setErrors((prev) => ({ ...prev, email: "" }));
+      newErrors.email = "Please enter a valid email address";
+      hasError = true;
     }
 
-    if (password.length < 6) {
-      setErrors((prev) => ({ ...prev, password: "Should be 6+ characters" }));
-      errorFlag = true;
-    } else {
-      setErrors((prev) => ({ ...prev, password: "" }));
+    if (!password) {
+      newErrors.password = "Password is required";
+      hasError = true;
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+      hasError = true;
     }
 
-    if (!errorFlag) {
+    setErrors(newErrors);
+
+    if (!hasError) {
+      setError("");
       try {
         setLoading(true);
         const data = await fetchAPI(
@@ -103,23 +132,19 @@ const SignInModal = ({ isOpen, onClose }) => {
             username: email,
             password: password,
           }),
-          {
-            "Content-Type": "application/x-www-form-urlencoded",
-          }
+          { "Content-Type": "application/x-www-form-urlencoded" }
         );
-        console.log("Authentication successful:", data);
+
         localStorage.setItem("token", data.access_token);
         const userData = await fetchAPI("/users/me", "GET", null, {
           Authorization: `Bearer ${data.access_token}`,
         });
         setUser(userData);
-        console.log(userData);
-        setError("");
-        setEmail("");
-        setPassword("");
-        onClose();
-      } catch (error) {
-        setError(error.message);
+        handleClose();
+      } catch (err) {
+        setError(
+          err.message || "Authentication failed. Please check your credentials."
+        );
       } finally {
         setLoading(false);
       }
@@ -127,90 +152,98 @@ const SignInModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} isCentered>
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader fontWeight="bold">Sign Up</ModalHeader>
+    <Modal isOpen={isOpen} onClose={handleClose} isCentered>
+      <ModalOverlay bg="blackAlpha.600" />
+      <ModalContent bg={modalBg} borderRadius="xl" boxShadow="xl">
+        <ModalHeader fontWeight="bold" borderTopRadius="xl">
+          Sign Up / Sign In
+        </ModalHeader>
         <ModalCloseButton />
-        <ModalBody>
+        <ModalBody pb={6}>
           {error && (
-            <Box
-              fontWeight="500"
-              background="red.100"
-              borderRadius="md"
-              paddingY="2"
-              paddingX="4"
-              display="flex"
-              alignItems="center"
-            >
-              <Icon as={MdErrorOutline} color="red.500" marginRight="2" />
-              <Text color="red.500" fontSize="sm">
-                {error}
-              </Text>
-            </Box>
+            <Alert status="error" borderRadius="md" mb={4}>
+              <AlertIcon as={MdErrorOutline} />
+              <AlertDescription fontSize="sm">{error}</AlertDescription>
+            </Alert>
           )}
 
-          <VStack spacing={4} align={"flex-start"}>
-            <Stack direction={"column"} spacing={2} width={"full"}>
-              <FormControl>
-                <FormLabel htmlFor="email"></FormLabel>
+          <VStack spacing={4} align="stretch">
+            <FormControl isInvalid={!!errors.email}>
+              <InputGroup>
                 <Input
                   placeholder="Email"
                   id="email"
                   type="email"
                   value={email}
                   onChange={handleEmailChange}
-                  list="email-suggestions"
-                  borderColor={errors.email ? "red.500" : undefined}
+                  bg={inputBg}
+                  _hover={{ bg: inputHoverBg }}
+                  _focus={{
+                    borderColor: focusBorderColor,
+                    boxShadow: `0 0 0 1px ${focusBorderColor}`,
+                    bg: inputBg,
+                  }}
+                  borderRadius="full"
+                  size="lg"
                 />
-              </FormControl>
-
+              </InputGroup>
               {errors.email && (
-                <Box display="flex" alignItems="center" color="red.500">
-                  <Icon as={MdErrorOutline} marginRight={2} />
-                  <Text fontWeight="500">{errors.email}</Text>
-                </Box>
+                <Text fontSize="xs" color="red.500" mt={1} ml={3}>
+                  {errors.email}
+                </Text>
               )}
+            </FormControl>
 
-              <FormControl>
+            <FormControl isInvalid={!!errors.password}>
+              <InputGroup>
                 <Input
                   placeholder="Password"
-                  size="md"
+                  id="password"
+                  size="lg"
                   type="password"
                   value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
+                  onChange={handlePasswordChange}
+                  bg={inputBg}
+                  _hover={{ bg: inputHoverBg }}
+                  _focus={{
+                    borderColor: focusBorderColor,
+                    boxShadow: `0 0 0 1px ${focusBorderColor}`,
+                    bg: inputBg,
                   }}
-                  borderColor={errors.password ? "red.500" : undefined}
+                  borderRadius="full"
                 />
-              </FormControl>
+              </InputGroup>
               {errors.password && (
-                <Box display="flex" alignItems="center" color="red.500">
-                  <Icon as={MdErrorOutline} marginRight={2} />
-                  <Text fontWeight="500">{errors.password}</Text>
-                </Box>
+                <Text fontSize="xs" color="red.500" mt={1} ml={3}>
+                  {errors.password}
+                </Text>
               )}
-              <PurpleButton
-                name={"Sign Up"}
-                w={"full"}
-                onClick={handleSubmit}
-                loading={loading}
-              />
-              <Divider orientation="horizontal" my={1} />
-              <Button
-                leftIcon={<FcGoogle />}
-                colorScheme="gray"
-                variant="solid"
-                w={"full"}
-                onClick={() => googleLogin()}
-                borderRadius="full"
-                size="lg"
-                mt={1}
-                mb={2}
-              >
-                Sign in with Google
-              </Button>
-            </Stack>
+            </FormControl>
+
+            <PurpleButton
+              name={"Continue"}
+              w={"full"}
+              onClick={handleSubmit}
+              loading={loading}
+              size="lg"
+              mt={2}
+            />
+
+            <Divider orientation="horizontal" my={2} />
+
+            <Button
+              leftIcon={<FcGoogle size="1.5em" />}
+              variant="outline"
+              borderColor={useColorModeValue("gray.300", "gray.600")}
+              colorScheme="gray"
+              w={"full"}
+              onClick={() => googleLogin()}
+              borderRadius="full"
+              size="lg"
+              _hover={{ bg: secondaryButtonHoverBg }}
+            >
+              Continue with Google
+            </Button>
           </VStack>
         </ModalBody>
       </ModalContent>
