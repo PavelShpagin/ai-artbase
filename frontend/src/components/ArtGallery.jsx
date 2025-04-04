@@ -40,21 +40,37 @@ const ImageItem = ({ photo, left, top, onClick, getPathKey }) => {
     e?.preventDefault?.();
 
     try {
-      const response = await fetch(photo.src);
+      // Add cache-busting query parameter
+      const cacheBustUrl = new URL(photo.src);
+      cacheBustUrl.searchParams.set("t", Date.now());
+
+      const response = await fetch(cacheBustUrl, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+        // Include credentials if your API requires authentication
+        credentials: "same-origin",
+      });
+
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.statusText}`);
       }
+
       const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const ephemeralLink = document.createElement("a");
+      ephemeralLink.style.display = "none";
+      ephemeralLink.href = url;
+      ephemeralLink.download = `image-${photo.id}.jpg`;
 
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `image-${photo.id}.jpg`;
+      document.body.appendChild(ephemeralLink);
+      ephemeralLink.click();
 
-      document.body.appendChild(link);
-      link.click();
-
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      ephemeralLink.remove();
     } catch (error) {
       console.error("Error downloading the image:", error);
       toast({
