@@ -60,34 +60,25 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
     return db_art
 
 @router.get("/arts/", response_model=List[schemas.Art])
-async def read_arts(limit: int = 100, viewer_id: Optional[int] = None, db: Session = Depends(get_db)):
-    # Retrieve all art IDs
-    all_art_ids = db.query(models.Art.id).all()
-    art_ids = [art_id[0] for art_id in all_art_ids]
+async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Session = Depends(get_db)):
+    # Count total number of arts in the database
+    total_arts = db.query(func.count(models.Art.id)).scalar()
     
-    if not art_ids:
+    if total_arts == 0:
         return []
     
     # Create a seed based on day to keep the shuffle consistent throughout the day
     # but change each day for a new shuffle
-    day_seed = 1 #int(time.time() / 86400)  # 86400 seconds in a day
+    day_seed = (int(time.time() / 86400) % 10000) / 10000  # 86400 seconds in a day
     
-    # Use the seed to create a deterministic shuffle
-    np.random.seed(day_seed)
-    shuffled_art_ids = list(art_ids)  # Create a copy
-    np.random.shuffle(shuffled_art_ids)
+    db.execute(text("SELECT setseed(:seed)"), {"seed": day_seed})
+    # Calculate offset based on current time
+    # This creates a linear progression throughout the day
+    current_time_seconds = int(time.time() / 3600)
+    time_offset = current_time_seconds % max(1, total_arts - limit)
     
-    # Get the current hour to determine rotation amount
-    current_hour = 1 #int(time.time() / 3600) % 24  # Hour of the day (0-23)
-    
-    # Rotate by 1 position for each hour that has passed
-    rotated_art_ids = shuffled_art_ids[current_hour % len(shuffled_art_ids):] + shuffled_art_ids[:current_hour % len(shuffled_art_ids)]
-    
-    # Create a case statement for ordering results according to the rotated list
-    order_case = case({id_: index for index, id_ in enumerate(rotated_art_ids)}, value=models.Art.id)
-    
-    # Query arts using the ordered case
-    arts = db.query(models.Art).order_by(order_case).limit(limit).all()
+    # Query arts with offset and limit, ordered by random seed
+    arts = db.query(models.Art).order_by(func.random()).offset(time_offset).limit(limit).all()
     
     arts_with_likes = [
         {**art.__dict__, "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False}

@@ -1,13 +1,32 @@
 from logging.config import fileConfig
-
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
-
 from alembic import context
+import os
+import sys
+
+# Add the parent directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# Import Base and models
+try:
+    from app.database import Base
+    # Import all models here to ensure they're registered with Base.metadata
+    from app.models import Art, User, Category, ArtMetadata
+    target_metadata = Base.metadata
+except ImportError as e:
+    print(f"Error importing models: {e}")
+    # If models can't be imported, metadata will be empty
+    target_metadata = None
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Override SQLAlchemy URL with environment variable if available
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    config.set_main_option('sqlalchemy.url', database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -18,19 +37,6 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-import os
-import sys
-from app.models import Base
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
-    
-target_metadata = Base.metadata
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
-
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

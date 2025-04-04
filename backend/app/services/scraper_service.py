@@ -11,7 +11,7 @@ def run_scraper():
     subprocess.Popen(["node", str(scraper_path)], 
                     env={
                         **os.environ,
-                        "API_URL": "http://localhost:8000",  # Your FastAPI port
+                        "API_URL": "http://localhost:8000",  # Change to backend:8000 in Docker
                         "OWNER_ID": "4"
                     })
 

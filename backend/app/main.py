@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from .database import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 from . import models
@@ -11,7 +11,7 @@ from pathlib import Path
 import asyncio
 from threading import Thread
 import json
-from .services.scraper_service import router as scraper_router
+from .services.scraper_service import router as scraper_router, run_scraper
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -38,6 +38,17 @@ app.include_router(users.router)
 app.include_router(processed_links.router)
 app.include_router(art_metadata.router)
 app.include_router(scraper_router, prefix="/scraper", tags=["scraper"])
+
+# Add background task to run the scraper on startup
+@app.on_event("startup")
+async def startup_scraper():
+    # Run scraper directly since we're already in a background context
+    asyncio.create_task(run_async_scraper())
+
+async def run_async_scraper():
+    # Run the scraper function asynchronously
+    run_scraper()
+    print("Scraper started in background")
 
 '''
 from .chroma_services import *
