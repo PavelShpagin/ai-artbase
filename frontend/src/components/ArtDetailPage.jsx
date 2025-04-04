@@ -311,12 +311,24 @@ const ArtDetailPage = () => {
           display="flex"
           // justifyContent="center"
           alignItems="center"
-          //ref={imageContainerRef}
+          ref={imageContainerRef}
           // onClick={handleImageClick} Prevent clicks on the image container from triggering the back navigation
         >
           {art ? (
             <>
-              <Box position="relative" width="auto" maxWidth="100%">
+              <Box
+                position="relative"
+                height="100%"
+                //maxWidth="80vw"
+                width={`min(80vw,${
+                  imageContainerRef.current.offsetHeight *
+                  (art.width / art.height)
+                }px)`}
+                background="rgb(229, 231, 235)"
+                borderRadius="lg"
+                overflow="hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <Box position="relative">
                   {/* Back button positioned on the image */}
                   <Box
@@ -344,13 +356,13 @@ const ArtDetailPage = () => {
                   >
                     <IoArrowBackOutline size={22} />
                   </Box>
-
                   <OptimizedImage
                     src={art.src}
                     objectFit="contain"
                     maxHeight={{ base: "60vh", md: "80vh" }}
                     cursor="zoom-in"
                     borderRadius="lg"
+                    loading="lazy"
                     onClick={handleImageClick}
                   />
                 </Box>

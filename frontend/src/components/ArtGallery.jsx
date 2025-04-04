@@ -4,6 +4,7 @@ import React, {
   useRef,
   useLayoutEffect,
   useCallback,
+  useMemo,
 } from "react";
 import Gallery from "react-photo-gallery";
 import { useNavigate, useLocation, useNavigationType } from "react-router-dom";
@@ -254,6 +255,22 @@ const ImageItem = ({ photo, left, top, onClick, getPathKey }) => {
     </div>
   );
 };
+
+// Simple component to render a gray placeholder box
+const PlaceholderItem = ({ left, top, width, height }) => (
+  <div
+    style={{
+      position: "absolute",
+      left,
+      top,
+      width,
+      height,
+      backgroundColor: "rgb(229, 231, 235)", // gray-200
+      borderRadius: "8px",
+    }}
+    aria-hidden="true" // Hide placeholders from screen readers
+  />
+);
 
 export const ArtGallery = ({ fetchArts, setArt }) => {
   const navigate = useNavigate();
@@ -606,23 +623,125 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     );
   };
 
+  // --- Add placeholder data generation ---
+  const placeholderArts = useMemo(() => {
+    const ratios = [
+      { width: 1, height: 1 },
+      { width: 4, height: 3 },
+      { width: 3, height: 4 },
+      { width: 16, height: 9 },
+      { width: 9, height: 16 },
+      { width: 3, height: 4 },
+      { width: 4, height: 3 },
+      { width: 1, height: 1 },
+      { width: 16, height: 9 },
+      { width: 9, height: 16 },
+      { width: 3, height: 4 },
+      { width: 4, height: 3 },
+      { width: 1, height: 1 },
+      { width: 1, height: 1 },
+      { width: 4, height: 3 },
+      { width: 3, height: 4 },
+      { width: 16, height: 9 },
+      { width: 9, height: 16 },
+      { width: 3, height: 4 },
+      { width: 4, height: 3 },
+      { width: 1, height: 1 },
+      { width: 16, height: 9 },
+      { width: 9, height: 16 },
+      { width: 3, height: 4 },
+      { width: 4, height: 3 },
+      { width: 1, height: 1 },
+      { width: 1, height: 1 },
+      { width: 4, height: 3 },
+      { width: 3, height: 4 },
+      { width: 16, height: 9 },
+      { width: 9, height: 16 },
+      { width: 3, height: 4 },
+      { width: 4, height: 3 },
+      { width: 1, height: 1 },
+      { width: 16, height: 9 },
+      { width: 9, height: 16 },
+      { width: 3, height: 4 },
+      { width: 4, height: 3 },
+      { width: 1, height: 1 },
+    ];
+    return Array.from({ length: ITEMS_PER_PAGE }, (_, i) => ({
+      id: `placeholder-${i}`,
+      src: `placeholder-${i}.jpg`, // react-photo-gallery needs a unique src
+      ...ratios[i % ratios.length], // Cycle through different aspect ratios
+      alt: "Loading placeholder",
+    }));
+  }, [ITEMS_PER_PAGE]); // Only depends on ITEMS_PER_PAGE
+
+  // Custom renderer for placeholder items
+  const placeholderRenderer = ({ index, left, top, key, photo }) => {
+    return (
+      <PlaceholderItem
+        key={`${key}-${index}`}
+        left={left}
+        top={top}
+        width={photo.width}
+        height={photo.height}
+      />
+    );
+  };
+  // --- End placeholder logic ---
+
+  // --- DOM Check Logic ---
+  // Note: Directly querying DOM in render can be fragile. Consider useEffect for robustness.
+  let shouldShowSpinnerBasedOnDOM = false;
+  if (typeof window !== "undefined") {
+    // Ensure this only runs client-side
+    const galleryElement = document.querySelector(
+      ".react-photo-gallery--gallery"
+    );
+    if (galleryElement && galleryElement.children.length > 5) {
+      shouldShowSpinnerBasedOnDOM = true;
+    }
+  }
+  // --- End DOM Check Logic ---
+
   return (
     <>
       <div className="p-4" ref={galleryRef}>
-        {
-          <Box
-            ref={boxRef}
-            height={`${layoutHeight}px`}
-            position="absolute"
-            width="100%"
-            left={0}
-            opacity={0}
-            // bg="black"
-            pointerEvents="none"
-            //aria-hidden="true"
-          />
-        }
-        {visibleArts && visibleArts.length > 0 && (
+        {/* Layout height placeholder box */}
+        <Box
+          ref={boxRef}
+          height={`${layoutHeight}px`}
+          position="absolute"
+          width="100%"
+          left={0}
+          opacity={0}
+          pointerEvents="none"
+          aria-hidden="true"
+        />
+
+        {/* ---- Absolute positioned Loading Spinner for Infinite Scroll ---- */}
+        {/* Show only after initial gallery is visible AND there are more arts to load AND DOM check passes */}
+
+        {/* ---- Placeholder Gallery ---- */}
+        {/* Show only during the initial fetch before any arts are visible */}
+        {/* {visibleArts.length === 0 && !stageStatus.stageFetchingComplete && (
+          <div className="gallery" aria-hidden="true">
+            <Gallery
+              photos={placeholderArts}
+              direction="column"
+              columns={(containerWidth) => {
+                if (containerWidth >= 1280) return 6; // xl
+                if (containerWidth >= 1024) return 5; // lg
+                if (containerWidth >= 768) return 4; // md
+                if (containerWidth >= 512) return 3; // sm
+                return 2; // default
+              }}
+              renderImage={placeholderRenderer}
+            />
+          </div>
+        )} */}
+
+        {/* ---- Real Gallery ---- */}
+        {/* Show the main gallery once visibleArts has items */}
+        {visibleArts.length > 0 && (
           <div className="gallery" onClick={(e) => e.stopPropagation()}>
             <Gallery
               photos={visibleArts}
@@ -631,15 +750,49 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
                 if (containerWidth >= 1280) return 6; // xl
                 if (containerWidth >= 1024) return 5; // lg
                 if (containerWidth >= 768) return 4; // md
-                if (containerWidth >= 512) return 3; // md
+                if (containerWidth >= 512) return 3; // sm
                 return 2; // default
               }}
               onClick={handleClick}
               renderImage={imageRenderer}
             />
+            {/* Invisible loader reference for infinite scrolling */}
+            {/* <Box
+              ref={loaderRef}
+              position="absolute"
+              width="100%"
+              height="20px"
+              bottom="0"
+              left="0"
+              opacity="0"
+              pointerEvents="none"
+              aria-hidden="true"
+            /> */}
+            {/* ---- Loading Spinner for Infinite Scroll ---- */}
+            {/* <p>
+              hello {document.querySelector(".react-photo-gallery--gallery")}
+            </p>
+            {/* Show only after initial gallery is visible AND there are more arts to load */}
+            {/* {document.querySelector(".react-photo-gallery--gallery") &&
+              stageStatus.stageInitialRenderComplete && // Ensure initial render is done
+              visibleArts.length > 0 && // Ensure gallery is visible
+              visibleArts.length < arts.length && ( // Ensure there are more arts to load
+                <Box
+                  ref={loaderRef} // loaderRef is now attached here
+                  display="flex"
+                  justifyContent="center"
+                  width="100%"
+                  paddingTop="16px"
+                  paddingBottom="16px"
+                >
+                  <Spinner size="md" thickness="4px" color="gray.200" />
+                </Box>
+              )} */}
           </div>
         )}
 
+        {/* ---- No Images Message ---- */}
+        {/* Show only when fetching is complete and resulted in zero arts */}
         {arts.length === 0 && stageStatus.stageFetchingComplete && (
           <Box
             display="flex"
@@ -653,7 +806,6 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
             </Text>
           </Box>
         )}
-
         {(arts.length > 0 || !stageStatus.stageFetchingComplete) &&
           (!visibleArts ||
             arts.length === 0 ||
