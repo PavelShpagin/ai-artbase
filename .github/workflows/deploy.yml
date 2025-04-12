@@ -61,11 +61,7 @@ jobs:
           script: |
             cd /root/aiartbase
 
-            cat > deploy.sh << 'EOL'
-            #!/bin/bash
-            set -e  # Exit on any error
-
-            # Export all environment variables
+            # Export environment variables
             export DATABASE_URL="${{ secrets.DATABASE_URL }}"
             export SECRET_KEY="${{ secrets.SECRET_KEY }}"
             export ALGORITHM="${{ secrets.ALGORITHM }}"
@@ -85,62 +81,15 @@ jobs:
             docker pull pavelshpagin/aiartbase-backend:latest
             docker pull pavelshpagin/aiartbase-scraper:latest
 
-            # Create or update docker-stack.yml with proper configuration
-            cat > docker-stack.yml << 'EOYAML'
+            # Create docker-stack.yml
+            cat > docker-stack.yml << EOF
             version: '3.8'
 
             services:
-              backend:
-                image: pavelshpagin/aiartbase-backend:latest
-                ports:
-                  - "8000:8000"
-                environment:
-                  # Database
-                  - DATABASE_URL=${DATABASE_URL}
-                  # Security
-                  - SECRET_KEY=${SECRET_KEY}
-                  - ALGORITHM=${ALGORITHM}
-                  - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-                  # ChromaDB
-                  - CHROMA_DB_PATH=${CHROMA_DB_PATH}
-                  # AI APIs
-                  - OPENAI_API_KEY=${OPENAI_API_KEY}
-                  - GEMINI_API_KEY=${GEMINI_API_KEY}
-                  # R2 Storage
-                  - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
-                  - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
-                  - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
-                  - R2_BUCKET_NAME=${R2_BUCKET_NAME}
-                  - R2_PUBLIC_URL=${R2_PUBLIC_URL}
-                volumes:
-                  - chroma_data:/app/chroma_data
-                depends_on:
-                  - db
-                networks:
-                  - app-network
-                deploy:
-                  replicas: 1
-                  restart_policy:
-                    condition: on-failure
-
-              scraper:
-                image: pavelshpagin/aiartbase-scraper:latest
-                environment:
-                  - API_URL=${API_URL}
-                  - OWNER_ID=${OWNER_ID}
-                  - OPENAI_API_KEY=${OPENAI_API_KEY}
-                  - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-                depends_on:
-                  - backend
-                networks:
-                  - app-network
-                deploy:
-                  replicas: 1
-                  restart_policy:
-                    condition: on-failure
-
               db:
                 image: postgres:13
+                ports:
+                  - "5432:5432"
                 environment:
                   - POSTGRES_USER=postgres
                   - POSTGRES_PASSWORD=pirate228
@@ -158,25 +107,82 @@ jobs:
                   interval: 10s
                   timeout: 5s
                   retries: 5
+                  start_period: 10s
+
+              backend:
+                image: pavelshpagin/aiartbase-backend:latest
+                ports:
+                  - "8000:8000"
+                environment:
+                  - DATABASE_URL=postgresql://postgres:pirate228@db:5432/Ai_ArtBase
+                  - SECRET_KEY=${SECRET_KEY}
+                  - ALGORITHM=${ALGORITHM}
+                  - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+                  - CHROMA_DB_PATH=${CHROMA_DB_PATH}
+                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                  - GEMINI_API_KEY=${GEMINI_API_KEY}
+                  - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+                  - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+                  - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+                  - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+                  - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+                volumes:
+                  - chroma_data:/app/chroma_data
+                depends_on:
+                  - db
+                networks:
+                  - app-network
+                deploy:
+                  replicas: 1
+                  restart_policy:
+                    condition: on-failure
+                    delay: 10s
+                    max_attempts: 5
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 40s
+
+              scraper:
+                image: pavelshpagin/aiartbase-scraper:latest
+                environment:
+                  - API_URL=http://backend:8000
+                  - OWNER_ID=${OWNER_ID}
+                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                  - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+                depends_on:
+                  - backend
+                networks:
+                  - app-network
+                deploy:
+                  replicas: 1
+                  restart_policy:
+                    condition: on-failure
+                    delay: 60s  # Give backend time to fully start
+                    max_attempts: 5
+                healthcheck:
+                  test: ["CMD", "node", "-e", "require('http').get('http://backend:8000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+                  interval: 1m
+                  timeout: 10s
+                  retries: 3
+                  start_period: 2m
 
             networks:
               app-network:
                 driver: overlay
+                attachable: true
 
             volumes:
               postgres_data:
               chroma_data:
-            EOYAML
+            EOF
 
             # Deploy stack
             docker stack deploy -c docker-stack.yml aiartbase
 
-            # Check service status
-            echo "Waiting for services to start..."
-            sleep 10
+            # Check deployment status
+            echo "Deployment completed. Checking service status..."
+            sleep 15
             docker service ls
-            EOL
-
-            # Make executable and run
-            chmod +x deploy.sh
-            ./deploy.sh
