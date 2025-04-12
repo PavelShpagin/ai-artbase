@@ -37,18 +37,18 @@ app.include_router(categories.router)
 app.include_router(users.router)
 app.include_router(processed_links.router)
 app.include_router(art_metadata.router)
-app.include_router(scraper_router, prefix="/scraper", tags=["scraper"])
+# app.include_router(scraper_router, prefix="/scraper", tags=["scraper"])
 
 # Add background task to run the scraper on startup
-@app.on_event("startup")
-async def startup_scraper():
-    # Run scraper directly since we're already in a background context
-    asyncio.create_task(run_async_scraper())
+# @app.on_event("startup")
+# async def startup_scraper():
+#     # Run scraper directly since we're already in a background context
+#     asyncio.create_task(run_async_scraper())
 
-async def run_async_scraper():
-    # Run the scraper function asynchronously
-    run_scraper()
-    print("Scraper started in background")
+# async def run_async_scraper():
+#     # Run the scraper function asynchronously
+#     run_scraper()
+#     print("Scraper started in background")
 # Print ChromaDB collection sizes
 @app.get("/chroma-stats", tags=["debug"])
 async def get_chroma_stats():
