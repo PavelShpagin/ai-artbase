@@ -9,7 +9,8 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
       - name: Login to Docker Hub
         uses: docker/login-action@v1
@@ -61,27 +62,7 @@ jobs:
           script: |
             cd /root/aiartbase
 
-            # Export environment variables
-            export DATABASE_URL="${{ secrets.DATABASE_URL }}"
-            export SECRET_KEY="${{ secrets.SECRET_KEY }}"
-            export ALGORITHM="${{ secrets.ALGORITHM }}"
-            export ACCESS_TOKEN_EXPIRE_MINUTES="${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}"
-            export CHROMA_DB_PATH="${{ secrets.CHROMA_DB_PATH }}"
-            export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
-            export GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
-            export R2_ACCESS_KEY_ID="${{ secrets.R2_ACCESS_KEY_ID }}"
-            export R2_SECRET_ACCESS_KEY="${{ secrets.R2_SECRET_ACCESS_KEY }}"
-            export R2_ENDPOINT_URL="${{ secrets.R2_ENDPOINT_URL }}"
-            export R2_BUCKET_NAME="${{ secrets.R2_BUCKET_NAME }}"
-            export R2_PUBLIC_URL="${{ secrets.R2_PUBLIC_URL }}"
-            export API_URL="${{ secrets.API_URL }}"
-            export OWNER_ID="${{ secrets.OWNER_ID }}"
-
-            # Pull latest images
-            docker pull pavelshpagin/aiartbase-backend:latest
-            docker pull pavelshpagin/aiartbase-scraper:latest
-
-            # Create docker-stack.yml
+            # Create stack file
             cat > docker-stack.yml << EOF
             version: '3.8'
 
@@ -115,17 +96,17 @@ jobs:
                   - "8000:8000"
                 environment:
                   - DATABASE_URL=postgresql://postgres:pirate228@db:5432/Ai_ArtBase
-                  - SECRET_KEY=${SECRET_KEY}
-                  - ALGORITHM=${ALGORITHM}
-                  - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-                  - CHROMA_DB_PATH=${CHROMA_DB_PATH}
-                  - OPENAI_API_KEY=${OPENAI_API_KEY}
-                  - GEMINI_API_KEY=${GEMINI_API_KEY}
-                  - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
-                  - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
-                  - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
-                  - R2_BUCKET_NAME=${R2_BUCKET_NAME}
-                  - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+                  - SECRET_KEY=${{ secrets.SECRET_KEY }}
+                  - ALGORITHM=${{ secrets.ALGORITHM }}
+                  - ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
+                  - CHROMA_DB_PATH=${{ secrets.CHROMA_DB_PATH }}
+                  - OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+                  - GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+                  - R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
+                  - R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
+                  - R2_ENDPOINT_URL=${{ secrets.R2_ENDPOINT_URL }}
+                  - R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }}
+                  - R2_PUBLIC_URL=${{ secrets.R2_PUBLIC_URL }}
                 volumes:
                   - chroma_data:/app/chroma_data
                 depends_on:
@@ -149,8 +130,8 @@ jobs:
                 image: pavelshpagin/aiartbase-scraper:latest
                 environment:
                   - API_URL=http://backend:8000
-                  - OWNER_ID=${OWNER_ID}
-                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                  - OWNER_ID=${{ secrets.OWNER_ID }}
+                  - OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
                   - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
                 depends_on:
                   - backend
@@ -160,7 +141,7 @@ jobs:
                   replicas: 1
                   restart_policy:
                     condition: on-failure
-                    delay: 60s  # Give backend time to fully start
+                    delay: 60s
                     max_attempts: 5
                 healthcheck:
                   test: ["CMD", "node", "-e", "require('http').get('http://backend:8000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -179,8 +160,15 @@ jobs:
               chroma_data:
             EOF
 
-            # Deploy stack
-            docker stack deploy -c docker-stack.yml aiartbase
+            # Update existing stack or deploy new one
+            if docker stack ls | grep -q "aiartbase"; then
+              echo "Updating existing stack..."
+              docker service update --image pavelshpagin/aiartbase-backend:latest aiartbase_backend
+              docker service update --image pavelshpagin/aiartbase-scraper:latest aiartbase_scraper
+            else
+              echo "Deploying new stack..."
+              docker stack deploy -c docker-stack.yml aiartbase
+            fi
 
             # Check deployment status
             echo "Deployment completed. Checking service status..."
