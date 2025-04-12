@@ -45,6 +45,8 @@ jobs:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd /root/aiartbase
             export DATABASE_URL="${{ secrets.DATABASE_URL }}"
