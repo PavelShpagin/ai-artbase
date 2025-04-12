@@ -27,3 +27,15 @@ frontend/.env
 backend/.env
 scraper/.env
 scraper/node_modules
+
+*.sql
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.lzma
+*.tar.lzma
+
+backend/chroma_data/*
+

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database configuration
-URL_DATABASE = os.environ.get('DATABASE_URL')
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 # Security configuration
 SECRET_KEY = os.environ.get('SECRET_KEY')

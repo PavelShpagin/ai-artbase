@@ -806,20 +806,30 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
             </Text>
           </Box>
         )}
+
         {(arts.length > 0 || !stageStatus.stageFetchingComplete) &&
           (!visibleArts ||
             arts.length === 0 ||
             visibleArts.length < arts.length) && (
-            <Box
-              ref={loaderRef}
-              display="flex"
-              justifyContent="center"
-              width="100%"
-              paddingTop="16px"
-              paddingBottom="16px"
-            >
-              <Spinner size="md" thickness="4px" color="gray.200" />
-            </Box>
+            <>
+              {visibleArts.length === 0 && location.pathname === "/" && (
+                <Box width="100%" paddingTop="40vh" />
+              )}
+              <Box
+                ref={loaderRef}
+                display="flex"
+                justifyContent="center"
+                width="100%"
+                paddingTop="16px"
+                paddingBottom="16px"
+              >
+                <Spinner
+                  size={location.pathname === "/" ? "lg" : "md"}
+                  thickness={location.pathname === "/" ? "5px" : "4px"}
+                  color="gray.200"
+                />
+              </Box>
+            </>
           )}
       </div>
     </>

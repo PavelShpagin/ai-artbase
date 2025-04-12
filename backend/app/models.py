@@ -34,6 +34,7 @@ class Art(Base):
     id = Column(Integer, primary_key=True, index=True)
     src = Column(String)
     prompt = Column(String)
+    descriptive_prompt = Column(String)
     width = Column(Integer)
     height = Column(Integer)
     premium = Column(Boolean, default=False)

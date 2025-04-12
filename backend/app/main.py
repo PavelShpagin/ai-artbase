@@ -20,7 +20,7 @@ app = FastAPI()
 origins = [
     # "http://localhost:5173",
     # "https://aiartbase.com", #production domain
-    "*"
+    "*",
 ]
 
 app.add_middleware(
@@ -49,6 +49,15 @@ async def run_async_scraper():
     # Run the scraper function asynchronously
     run_scraper()
     print("Scraper started in background")
+# Print ChromaDB collection sizes
+@app.get("/chroma-stats", tags=["debug"])
+async def get_chroma_stats():
+    from .chroma_services import collection_prompts, collection_categories
+    
+    return {
+        "prompts_collection_size": collection_prompts.count(),
+        "categories_collection_size": collection_categories.count()
+    }
 
 '''
 from .chroma_services import *

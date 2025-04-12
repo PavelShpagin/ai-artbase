@@ -2,11 +2,13 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install system dependencies including PostgreSQL client
+# Install system dependencies including Node.js
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
     postgresql-server-dev-all \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages

@@ -24,6 +24,7 @@ class User(UserCreate):
 # Art
 class ArtBase(BaseModel):
     prompt: str
+    descriptive_prompt: Optional[str] = None
 
 class ArtCreate(ArtBase):
     pass
@@ -34,9 +35,9 @@ class Art(ArtBase):
     date: datetime
     width: int
     height: int
-    premium: bool
-    owner_id: Optional[int] = None
-    num_likes: int
+    premium: bool = False
+    owner_id: int
+    num_likes: int = 0
     liked_by_user: bool = False
 
     class Config:

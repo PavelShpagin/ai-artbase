@@ -359,7 +359,7 @@ const ArtDetailPage = () => {
                   <OptimizedImage
                     src={art.src}
                     objectFit="contain"
-                    maxHeight={{ base: "60vh", md: "80vh" }}
+                    //maxHeight={{ base: "70vh", md: "80vh" }}
                     cursor="zoom-in"
                     borderRadius="lg"
                     loading="lazy"

@@ -14,11 +14,10 @@ const OpenAI = require("openai");
 
 // Replace the existing proxy list with these new proxies
 const proxyList = [
-  //   "185.235.71.54:43621:vmYIUR6EvIxLJZq:dmiiskrUq2kautk",
-  //   "185.235.71.84:45544:iLWogkubut7ZbEE:ovllWoPijNudRnA",
-  //   "91.192.240.102:44992:qwoZ1u3wnDMn44J:EjsawCCaIFSF2x3",
   "91.192.240.202:44700:Eir8JUVeo8Q8tPz:7bL1qXGwQHweicl",
   "91.192.242.253:41922:LsQ1SBMOr3tqEcQ:JUsO8CEgOPsCmkg",
+  "74.114.54.152:49762:7YzWlReSHldBCUA:SBePvFuFSRzuGql",
+  "91.192.243.21:47306:NI5mYFyxXbID3az:mqgXoF2BaWvzcr0",
 ];
 
 // ... existing proxy functions ...

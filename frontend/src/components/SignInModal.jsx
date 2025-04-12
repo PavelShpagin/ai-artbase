@@ -229,7 +229,7 @@ const SignInModal = ({ isOpen, onClose }) => {
               mt={2}
             />
 
-            <Divider orientation="horizontal" my={2} />
+            <Divider orientation="horizontal" my={0} />
 
             <Button
               leftIcon={<FcGoogle size="1.5em" />}

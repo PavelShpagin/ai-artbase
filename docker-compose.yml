@@ -1,0 +1,53 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:pirate228@db:5432/Ai_ArtBase
+    volumes:
+      - ./backend/chroma_data:/app/chroma_data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  scraper:
+    build: ./scraper
+    environment:
+      - API_URL=http://backend:8000
+      - OWNER_ID=4
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  db:
+    image: postgres:13
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=pirate228
+      - POSTGRES_DB=Ai_ArtBase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

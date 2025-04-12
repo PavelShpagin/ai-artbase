@@ -14,11 +14,20 @@ from ..r2_storage import upload_image_to_r2
 from ..chroma_services import collection_prompts
 import numpy as np
 import time
+from app.scripts.enhance_prompts import generate_description
 
 router = APIRouter()
 
 @router.post("/arts/", response_model=schemas.Art)
 async def create_art(prompt: str = Form(...), image: UploadFile = File(...), owner_id: int = Form(...), db: Session = Depends(get_db)): 
+    # Validate owner_id exists
+    user = db.query(models.User).filter(models.User.id == owner_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail=f"User with id {owner_id} does not exist"
+        )
+
     # Read image data
     image_data = await image.read()
     image.file.seek(0)  # Reset file pointer
@@ -38,26 +47,53 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload image to R2: {str(e)}")
     
+    # Initialize descriptive_prompt with original prompt
+    descriptive_prompt = prompt
+    
+    # Generate descriptive prompt using Gemini
+    try:
+        # Generate descriptive keywords for the image
+        generated_prompt = await generate_description(image_url, prompt, model='gemini')
+        if generated_prompt:
+            descriptive_prompt = generated_prompt
+    except Exception as e:
+        # Log the error but continue with original prompt
+        print(f"Error generating descriptive prompt: {str(e)}")
+
     # Store the R2 URL in the database
-    db_art = models.Art(width=width, height=height, prompt=prompt, src=image_url, owner_id=owner_id)
-    db.add(db_art)
-    db.commit()
-    db.refresh(db_art)
-
-    collection_prompts.add(
-        documents=[prompt],
-        ids=[str(db_art.id)]
+    db_art = models.Art(
+        width=width, 
+        height=height, 
+        prompt=prompt, 
+        descriptive_prompt=descriptive_prompt, 
+        src=image_url, 
+        owner_id=owner_id
     )
-
-    results = collection_categories.query(query_texts=[prompt], include=["distances", "documents"])
-    filtered_ids = filter_chroma(results, 0.35)
-
-    if(filtered_ids):
-        associations = [{"art_id": db_art.id, "category_id": category_id} for category_id in filtered_ids]
-        db.execute(models.art_categories.insert(), associations)
+    
+    try:
+        db.add(db_art)
         db.commit()
+        db.refresh(db_art)
 
-    return db_art
+        # Add to ChromaDB
+        collection_prompts.add(
+            documents=[descriptive_prompt],
+            ids=[str(db_art.id)]
+        )
+
+        # Add categories
+        results = collection_categories.query(query_texts=[prompt], include=["distances", "documents"])
+        filtered_ids = filter_chroma(results, 0.35)
+
+        if filtered_ids:
+            associations = [{"art_id": db_art.id, "category_id": category_id} for category_id in filtered_ids]
+            db.execute(models.art_categories.insert(), associations)
+            db.commit()
+
+        return db_art
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create art entry: {str(e)}")
 
 @router.get("/arts/", response_model=List[schemas.Art])
 async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Session = Depends(get_db)):
@@ -69,16 +105,16 @@ async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Sess
     
     # Create a seed based on day to keep the shuffle consistent throughout the day
     # but change each day for a new shuffle
-    day_seed = (int(time.time() / 86400) % 10000) / 10000  # 86400 seconds in a day
+    # day_seed = (int(time.time() / 86400) % 10000) / 10000  # 86400 seconds in a day
     
-    db.execute(text("SELECT setseed(:seed)"), {"seed": day_seed})
+    # db.execute(text("SELECT setseed(:seed)"), {"seed": day_seed})
     # Calculate offset based on current time
     # This creates a linear progression throughout the day
     current_time_seconds = int(time.time() / 3600)
-    time_offset = current_time_seconds % max(1, total_arts - limit)
+    time_offset = current_time_seconds % 20000
     
     # Query arts with offset and limit, ordered by random seed
-    arts = db.query(models.Art).order_by(func.random()).offset(time_offset).limit(limit).all()
+    arts = db.query(models.Art).offset(time_offset).limit(limit).all()
     
     arts_with_likes = [
         {**art.__dict__, "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False}
@@ -88,7 +124,7 @@ async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Sess
 
 @router.get("/search/", response_model=List[schemas.Art])
 async def search_arts(query: str, user_id: Optional[int] = None, db: Session = Depends(get_db)):
-    results = collection_prompts.query(query_texts=[query], include=["distances"])  
+    results = collection_prompts.query(query_texts=[query], include=["distances"], n_results=100)  
     filtered_ids = results['ids'][0]
     
     if not filtered_ids:
@@ -148,7 +184,7 @@ async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Ses
         raise HTTPException(status_code=404, detail="Art not found")
     
     # Get the prompt from the source art
-    prompt = source_art.prompt
+    prompt = source_art.descriptive_prompt
     if not prompt:
         # If no prompt, return random arts
         arts = db.query(models.Art).filter(models.Art.id != art_id).limit(20).all()
