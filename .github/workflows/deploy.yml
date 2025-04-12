@@ -39,6 +39,16 @@ jobs:
             API_URL=${{ secrets.API_URL }}
             OWNER_ID=${{ secrets.OWNER_ID }}
 
+      - name: Build and push Scraper
+        uses: docker/build-push-action@v2
+        with:
+          context: ./scraper
+          push: true
+          tags: pavelshpagin/aiartbase-scraper:latest
+          build-args: |
+            API_URL=${{ secrets.API_URL }}
+            OWNER_ID=${{ secrets.OWNER_ID }}
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@master
         with:
@@ -49,6 +59,12 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd /root/aiartbase
+
+            cat > deploy.sh << 'EOL'
+            #!/bin/bash
+            set -e  # Exit on any error
+
+            # Export all environment variables
             export DATABASE_URL="${{ secrets.DATABASE_URL }}"
             export SECRET_KEY="${{ secrets.SECRET_KEY }}"
             export ALGORITHM="${{ secrets.ALGORITHM }}"
@@ -63,4 +79,20 @@ jobs:
             export R2_PUBLIC_URL="${{ secrets.R2_PUBLIC_URL }}"
             export API_URL="${{ secrets.API_URL }}"
             export OWNER_ID="${{ secrets.OWNER_ID }}"
+
+            # Pull latest images
+            docker pull pavelshpagin/aiartbase-backend:latest
+            docker pull pavelshpagin/aiartbase-scraper:latest
+
+            # Deploy stack
             docker stack deploy -c docker-stack.yml aiartbase
+
+            # Check service status
+            echo "Waiting for services to start..."
+            sleep 10
+            docker service ls
+            EOL
+
+            # Make executable and run
+            chmod +x deploy.sh
+            ./deploy.sh
