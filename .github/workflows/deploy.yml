@@ -48,6 +48,7 @@ jobs:
           build-args: |
             API_URL=${{ secrets.API_URL }}
             OWNER_ID=${{ secrets.OWNER_ID }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@master
@@ -83,6 +84,89 @@ jobs:
             # Pull latest images
             docker pull pavelshpagin/aiartbase-backend:latest
             docker pull pavelshpagin/aiartbase-scraper:latest
+
+            # Create or update docker-stack.yml with proper configuration
+            cat > docker-stack.yml << 'EOYAML'
+            version: '3.8'
+
+            services:
+              backend:
+                image: pavelshpagin/aiartbase-backend:latest
+                ports:
+                  - "8000:8000"
+                environment:
+                  # Database
+                  - DATABASE_URL=${DATABASE_URL}
+                  # Security
+                  - SECRET_KEY=${SECRET_KEY}
+                  - ALGORITHM=${ALGORITHM}
+                  - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+                  # ChromaDB
+                  - CHROMA_DB_PATH=${CHROMA_DB_PATH}
+                  # AI APIs
+                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                  - GEMINI_API_KEY=${GEMINI_API_KEY}
+                  # R2 Storage
+                  - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+                  - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+                  - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+                  - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+                  - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+                volumes:
+                  - chroma_data:/app/chroma_data
+                depends_on:
+                  - db
+                networks:
+                  - app-network
+                deploy:
+                  replicas: 1
+                  restart_policy:
+                    condition: on-failure
+
+              scraper:
+                image: pavelshpagin/aiartbase-scraper:latest
+                environment:
+                  - API_URL=${API_URL}
+                  - OWNER_ID=${OWNER_ID}
+                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                  - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+                depends_on:
+                  - backend
+                networks:
+                  - app-network
+                deploy:
+                  replicas: 1
+                  restart_policy:
+                    condition: on-failure
+
+              db:
+                image: postgres:13
+                environment:
+                  - POSTGRES_USER=postgres
+                  - POSTGRES_PASSWORD=pirate228
+                  - POSTGRES_DB=Ai_ArtBase
+                volumes:
+                  - postgres_data:/var/lib/postgresql/data
+                networks:
+                  - app-network
+                deploy:
+                  replicas: 1
+                  restart_policy:
+                    condition: on-failure
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U postgres"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+
+            networks:
+              app-network:
+                driver: overlay
+
+            volumes:
+              postgres_data:
+              chroma_data:
+            EOYAML
 
             # Deploy stack
             docker stack deploy -c docker-stack.yml aiartbase
