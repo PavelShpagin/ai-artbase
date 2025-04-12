@@ -11,7 +11,7 @@ from pathlib import Path
 import asyncio
 from threading import Thread
 import json
-from .services.scraper_service import router as scraper_router, run_scraper
+# from .services.scraper_service import router as scraper_router, run_scraper
 
 models.Base.metadata.create_all(bind=engine)
 
