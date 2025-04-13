@@ -24,21 +24,9 @@ jobs:
           context: ./backend
           push: true
           tags: pavelshpagin/aiartbase-backend:latest
+          # Only pass non-sensitive build args
           build-args: |
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            SECRET_KEY=${{ secrets.SECRET_KEY }}
-            ALGORITHM=${{ secrets.ALGORITHM }}
-            ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
-            CHROMA_DB_PATH=${{ secrets.CHROMA_DB_PATH }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
-            R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
-            R2_ENDPOINT_URL=${{ secrets.R2_ENDPOINT_URL }}
-            R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }}
-            R2_PUBLIC_URL=${{ secrets.R2_PUBLIC_URL }}
-            API_URL=${{ secrets.API_URL }}
-            OWNER_ID=${{ secrets.OWNER_ID }}
+            NODE_ENV=production
 
       - name: Build and push Scraper
         uses: docker/build-push-action@v2
@@ -46,10 +34,9 @@ jobs:
           context: ./scraper
           push: true
           tags: pavelshpagin/aiartbase-scraper:latest
+          # Only pass non-sensitive build args
           build-args: |
-            API_URL=${{ secrets.API_URL }}
-            OWNER_ID=${{ secrets.OWNER_ID }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            NODE_ENV=production
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@master
@@ -95,7 +82,8 @@ jobs:
                 ports:
                   - "8000:8000"
                 environment:
-                  - DATABASE_URL=postgresql://postgres:pirate228@db:5432/Ai_ArtBase
+                  # Use aiartbase_db instead of db for hostname in Swarm
+                  - DATABASE_URL=postgresql://postgres:pirate228@aiartbase_db:5432/Ai_ArtBase
                   - SECRET_KEY=${{ secrets.SECRET_KEY }}
                   - ALGORITHM=${{ secrets.ALGORITHM }}
                   - ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
@@ -129,7 +117,8 @@ jobs:
               scraper:
                 image: pavelshpagin/aiartbase-scraper:latest
                 environment:
-                  - API_URL=http://backend:8000
+                  # Use aiartbase_backend instead of backend for hostname in Swarm
+                  - API_URL=http://aiartbase_backend:8000
                   - OWNER_ID=${{ secrets.OWNER_ID }}
                   - OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
                   - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -144,7 +133,7 @@ jobs:
                     delay: 60s
                     max_attempts: 5
                 healthcheck:
-                  test: ["CMD", "node", "-e", "require('http').get('http://backend:8000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+                  test: ["CMD", "node", "-e", "require('http').get('http://aiartbase_backend:8000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
                   interval: 1m
                   timeout: 10s
                   retries: 3
@@ -160,11 +149,21 @@ jobs:
               chroma_data:
             EOF
 
-            # Update existing stack or deploy new one
+            # Ensure network exists
+            if ! docker network ls | grep -q "aiartbase_app-network"; then
+              docker network create --driver overlay --attachable aiartbase_app-network
+            fi
+
+            # Pull latest images to ensure we have them locally
+            docker pull pavelshpagin/aiartbase-backend:latest
+            docker pull pavelshpagin/aiartbase-scraper:latest
+
+            # Check if stack exists
             if docker stack ls | grep -q "aiartbase"; then
               echo "Updating existing stack..."
-              docker service update --image pavelshpagin/aiartbase-backend:latest aiartbase_backend
-              docker service update --image pavelshpagin/aiartbase-scraper:latest aiartbase_scraper
+              # Update services with force flag to ensure restart even if image tag is the same
+              docker service update --force --image pavelshpagin/aiartbase-backend:latest aiartbase_backend
+              docker service update --force --image pavelshpagin/aiartbase-scraper:latest aiartbase_scraper
             else
               echo "Deploying new stack..."
               docker stack deploy -c docker-stack.yml aiartbase
@@ -174,3 +173,11 @@ jobs:
             echo "Deployment completed. Checking service status..."
             sleep 15
             docker service ls
+            
+            # Print logs from services for debugging
+            echo "Backend service logs:"
+            docker service logs --tail 20 aiartbase_backend
+            
+            echo "Scraper service logs:"
+            docker service logs --tail 20 aiartbase_scraper
+EOF
