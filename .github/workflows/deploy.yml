@@ -173,11 +173,10 @@ jobs:
             echo "Deployment completed. Checking service status..."
             sleep 15
             docker service ls
-            
+
             # Print logs from services for debugging
             echo "Backend service logs:"
             docker service logs --tail 20 aiartbase_backend
-            
+
             echo "Scraper service logs:"
             docker service logs --tail 20 aiartbase_scraper
-EOF
