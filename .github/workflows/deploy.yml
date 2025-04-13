@@ -158,12 +158,23 @@ jobs:
             docker pull pavelshpagin/aiartbase-backend:latest
             docker pull pavelshpagin/aiartbase-scraper:latest
 
-            # Check if stack exists
+            # Check if stack exists and handle services accordingly
             if docker stack ls | grep -q "aiartbase"; then
-              echo "Updating existing stack..."
-              # Update services with force flag to ensure restart even if image tag is the same
-              docker service update --force --image pavelshpagin/aiartbase-backend:latest aiartbase_backend
-              docker service update --force --image pavelshpagin/aiartbase-scraper:latest aiartbase_scraper
+              echo "Existing stack found, checking services..."
+              
+              # Deploy stack to ensure all service definitions are updated
+              docker stack deploy -c docker-stack.yml aiartbase
+              
+              # Force update only if services exist
+              if docker service ls | grep -q "aiartbase_backend"; then
+                echo "Updating backend service..."
+                docker service update --force aiartbase_backend
+              fi
+              
+              if docker service ls | grep -q "aiartbase_scraper"; then
+                echo "Updating scraper service..."
+                docker service update --force aiartbase_scraper
+              fi
             else
               echo "Deploying new stack..."
               docker stack deploy -c docker-stack.yml aiartbase
