@@ -28,15 +28,15 @@ jobs:
           build-args: |
             NODE_ENV=production
 
-      - name: Build and push Scraper
-        uses: docker/build-push-action@v2
-        with:
-          context: ./scraper
-          push: true
-          tags: pavelshpagin/aiartbase-scraper:latest
-          # Only pass non-sensitive build args
-          build-args: |
-            NODE_ENV=production
+      # - name: Build and push Scraper
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     context: ./scraper
+      #     push: true
+      #     tags: pavelshpagin/aiartbase-scraper:latest
+      #     # Only pass non-sensitive build args
+      #     build-args: |
+      #       NODE_ENV=production
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@master
@@ -54,7 +54,7 @@ jobs:
 
             # Pull latest images
             docker pull pavelshpagin/aiartbase-backend:latest
-            docker pull pavelshpagin/aiartbase-scraper:latest
+            # docker pull pavelshpagin/aiartbase-scraper:latest
 
             # Store environment variables from GitHub secrets
             cat > .env << EOF
