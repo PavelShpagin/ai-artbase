@@ -88,7 +88,7 @@ jobs:
                   - POSTGRES_PASSWORD=pirate228
                   - POSTGRES_DB=Ai_ArtBase
                 volumes:
-                  - postgres_data:/var/lib/postgresql/data
+                  - ~/aiartbase/volumes/postgres:/var/lib/postgresql/data
                 restart: unless-stopped
                 networks:
                   - app-network
@@ -114,7 +114,7 @@ jobs:
                   - API_URL=${API_URL}
                   - OWNER_ID=${OWNER_ID}
                 volumes:
-                  - chroma_data:/app/chroma_data
+                  - ~/aiartbase/volumes/chroma_data:/app/chroma_data
                 depends_on:
                   - db
                 restart: unless-stopped
@@ -124,12 +124,6 @@ jobs:
             networks:
               app-network:
                 driver: bridge
-
-            volumes:
-              postgres_data:
-                name: aiartbase_postgres_data
-              chroma_data:
-                name: aiartbase_chroma_data
             EOF
 
             # Deploy with Docker Compose
