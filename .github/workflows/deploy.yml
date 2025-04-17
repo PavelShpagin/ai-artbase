@@ -51,6 +51,10 @@ jobs:
           script: |
             cd /root/aiartbase
 
+            # Ensure target directories exist on the host
+            mkdir -p /root/aiartbase/volumes/postgres
+            mkdir -p /root/aiartbase/volumes/chroma_data
+
             # Clean up disk space if needed
             docker system prune -af
 
@@ -75,7 +79,7 @@ jobs:
             OWNER_ID=${{ secrets.OWNER_ID }}
             EOF
 
-            # Create docker-compose file
+            # Create docker-compose file using bind mounts
             cat > docker-compose.yml << 'EOF'
             services:
               db:
@@ -88,7 +92,8 @@ jobs:
                   - POSTGRES_PASSWORD=pirate228
                   - POSTGRES_DB=Ai_ArtBase
                 volumes:
-                  - ~/aiartbase/volumes/postgres:/var/lib/postgresql/data
+                  # Bind mount for postgres data
+                  - /root/aiartbase/volumes/postgres:/var/lib/postgresql/data
                 restart: unless-stopped
                 networks:
                   - app-network
@@ -114,7 +119,8 @@ jobs:
                   - API_URL=${API_URL}
                   - OWNER_ID=${OWNER_ID}
                 volumes:
-                  - ~/aiartbase/volumes/chroma_data:/app/chroma_data
+                  # Bind mount for chroma data
+                  - /root/aiartbase/volumes/chroma_data:/app/chroma_data
                 depends_on:
                   - db
                 restart: unless-stopped
@@ -124,11 +130,13 @@ jobs:
             networks:
               app-network:
                 driver: bridge
+
+            # No top-level 'volumes:' section needed for bind mounts
             EOF
 
             # Deploy with Docker Compose
             docker compose down
-            docker compose up -d
+            docker compose up -d --remove-orphans
 
             # Show running containers
             docker compose ps
