@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
+.env
 frontend/.env
 backend/.env
 scraper/.env
@@ -38,4 +39,5 @@ scraper/node_modules
 *.tar.lzma
 
 backend/chroma_data/*
-
+chroma_data/*
+_backup/*

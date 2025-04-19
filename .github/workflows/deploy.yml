@@ -117,7 +117,21 @@ jobs:
                   - chroma_data:/app/chroma_data
                 depends_on:
                   - db
+                  - chromadb
                 restart: unless-stopped
+                networks:
+                  - app-network
+
+              chromadb:
+                image: chromadb/chroma:0.6.3
+                container_name: chromadb
+                ports:
+                  - "8000:8000"
+                environment:
+                  - IS_PERSISTENT=TRUE
+                  - PERSIST_DIRECTORY=/chroma/chroma
+                volumes:
+                  - ./chroma_data:/chroma/chroma
                 networks:
                   - app-network
 
@@ -127,17 +141,13 @@ jobs:
 
             volumes:
               postgres_data:
-                driver: local
-                driver_opts:
-                  type: none
-                  o: bind
-                  device: /root/aiartbase/volumes/postgres_data
               chroma_data:
                 driver: local
                 driver_opts:
                   type: none
                   o: bind
                   device: /root/aiartbase/volumes/chroma_data
+
             EOF
 
             # Deploy with Docker Compose

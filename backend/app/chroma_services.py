@@ -1,12 +1,18 @@
 import chromadb
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+from chromadb.config import Settings
 import os
 from .config import *
 
 class ChromaService:
     def __init__(self):
         self.embedding_function = OpenAIEmbeddingFunction(api_key=OPENAI_API_KEY, model_name="text-embedding-ada-002")
-        self.client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+        chroma_host = os.getenv("CHROMA_HOST", "chromadb") # Default to service name
+        chroma_port = os.getenv("CHROMA_PORT", "8001")    # Default to internal port
+        self.client = chromadb.HttpClient(
+            host=chroma_host,
+            port=int(chroma_port)
+        )
 
     def get(self, name: str):
         try:

@@ -1,33 +1,7 @@
 services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:pirate228@db:5432/Ai_ArtBase
-    volumes:
-      - ./backend/chroma_data:/app/chroma_data
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  scraper:
-    build: ./scraper
-    environment:
-      - API_URL=http://backend:8000
-      - OWNER_ID=4
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - app-network
-
   db:
     image: postgres:13
+    container_name: aiartbase-db
     ports:
       - "5432:5432"
     environment:
@@ -36,12 +10,49 @@ services:
       - POSTGRES_DB=Ai_ArtBase
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  backend:
+    image: pavelshpagin/aiartbase-backend:latest
+    container_name: aiartbase-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:pirate228@db:5432/Ai_ArtBase
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=${ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - CHROMA_DB_PATH=/app/chroma_data
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+      - API_URL=${API_URL}
+      - OWNER_ID=${OWNER_ID}
+    volumes:
+      - chroma_data:/app/chroma_data
+    depends_on:
+      - db
+      - chromadb
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    container_name: chromadb
+    ports:
+      - "8001:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    volumes:
+      - ./chroma_data:/chroma/chroma
     networks:
       - app-network
 
@@ -51,3 +62,9 @@ networks:
 
 volumes:
   postgres_data:
+  chroma_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./backend/chroma_data
