@@ -131,7 +131,7 @@ jobs:
                 driver_opts:
                   type: none
                   o: bind
-                  device: /root/aiartbase/volumes/postgres
+                  device: /root/aiartbase/volumes/postgres_data
               chroma_data:
                 driver: local
                 driver_opts:
