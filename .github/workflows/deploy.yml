@@ -115,8 +115,6 @@ jobs:
                   - OWNER_ID=${OWNER_ID}
                   - CHROMA_HOST=chromadb
                   - CHROMA_PORT=8000
-                volumes:
-                  - chroma_data:/app/chroma_data
                 depends_on:
                   - db
                   - chromadb
@@ -133,7 +131,7 @@ jobs:
                   - IS_PERSISTENT=TRUE
                   - PERSIST_DIRECTORY=/chroma/chroma
                 volumes:
-                  - /root/aiartbase/volumes/chroma_data:/chroma/chroma
+                  - ./volumes/chroma_data:/chroma/chroma
                 networks:
                   - app-network
 
@@ -146,16 +144,5 @@ jobs:
 
             EOF
 
-            # Deploy with Docker Compose
             docker compose down
             docker compose up -d
-
-            # Show running containers
-            docker compose ps
-
-            # Display logs from services
-            echo "Backend logs:"
-            docker compose logs --tail 20 backend
-
-            echo "Database logs:"
-            docker compose logs --tail 20 db
