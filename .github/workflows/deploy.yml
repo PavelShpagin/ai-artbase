@@ -56,7 +56,7 @@ jobs:
 
             # Pull latest images
             docker pull pavelshpagin/aiartbase-backend:latest
-            # docker pull pavelshpagin/aiartbase-scraper:latest
+            docker pull pavelshpagin/aiartbase-scraper:latest
 
             # Store environment variables from GitHub secrets
             cat > .env << EOF
@@ -136,9 +136,7 @@ jobs:
                   - app-network
 
               scraper:
-                build:
-                  context: ./scraper
-                  dockerfile: Dockerfile
+                image: pavelshpagin/aiartbase-scraper:latest
                 container_name: aiartbase-scraper
                 environment:
                   - API_URL=https://api.aiartbase.com

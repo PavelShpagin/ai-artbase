@@ -304,7 +304,7 @@ const ArtDetailPage = () => {
         <Box
           //position="relative"
           width="fit-content"
-          height={{ base: "70vh", md: "80vh" }}
+          height={{ base: "70vh" }}
           maxWidth="80vw"
           borderRadius="lg"
           // overflow="hidden"
