@@ -50,7 +50,7 @@ services:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma/chroma
     volumes:
-      - ./chroma_data:/chroma/chroma
+      - ./backend/chroma_data:/chroma/chroma
     networks:
       - app-network
 
@@ -60,9 +60,3 @@ networks:
 
 volumes:
   postgres_data:
-  chroma_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./backend/chroma_data
