@@ -323,7 +323,6 @@ const Header = () => {
             }}
             placeholder="Search for AI images"
             borderRadius="full"
-            boxShadow="inner" // Use inner shadow for subtle depth
             fontWeight="500"
             color={useColorModeValue("gray.700", "gray.200")}
             value={searchQuery ?? ""} // Ensure value is never undefined/null for controlled input

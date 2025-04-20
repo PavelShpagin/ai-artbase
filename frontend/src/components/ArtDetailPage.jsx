@@ -318,7 +318,10 @@ const ArtDetailPage = () => {
             <>
               <Box
                 position="relative"
-                height="100%"
+                height={`${
+                  imageContainerRef.current.offsetWidth *
+                  (art.height / art.width)
+                }px`}
                 //maxWidth="80vw"
                 width={`min(80vw,${
                   imageContainerRef.current.offsetHeight *
