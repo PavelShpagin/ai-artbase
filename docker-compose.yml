@@ -34,6 +34,8 @@ services:
       - R2_PUBLIC_URL=${R2_PUBLIC_URL}
       - API_URL=${API_URL}
       - OWNER_ID=${OWNER_ID}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
     depends_on:
       - db
       - chromadb
@@ -44,11 +46,11 @@ services:
   chromadb:
     image: chromadb/chroma:0.6.3
     container_name: chromadb
-    ports:
-      - "8001:8000"
     environment:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma/chroma
+    ports:
+      - "8001:8000"
     volumes:
       - ./backend/chroma_data:/chroma/chroma
     networks:

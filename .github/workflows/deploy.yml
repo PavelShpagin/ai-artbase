@@ -113,6 +113,8 @@ jobs:
                   - R2_PUBLIC_URL=${R2_PUBLIC_URL}
                   - API_URL=${API_URL}
                   - OWNER_ID=${OWNER_ID}
+                  - CHROMA_HOST=chromadb
+                  - CHROMA_PORT=8000
                 volumes:
                   - chroma_data:/app/chroma_data
                 depends_on:
@@ -126,12 +128,12 @@ jobs:
                 image: chromadb/chroma:0.6.3
                 container_name: chromadb
                 ports:
-                  - "8000:8000"
+                  - "8001:8000"
                 environment:
                   - IS_PERSISTENT=TRUE
                   - PERSIST_DIRECTORY=/chroma/chroma
                 volumes:
-                  - ./chroma_data:/chroma/chroma
+                  - /root/aiartbase/volumes/chroma_data:/chroma/chroma
                 networks:
                   - app-network
 
@@ -141,12 +143,6 @@ jobs:
 
             volumes:
               postgres_data:
-              chroma_data:
-                driver: local
-                driver_opts:
-                  type: none
-                  o: bind
-                  device: /root/aiartbase/volumes/chroma_data
 
             EOF
 
