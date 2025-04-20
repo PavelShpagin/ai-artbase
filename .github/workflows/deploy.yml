@@ -135,6 +135,20 @@ jobs:
                 networks:
                   - app-network
 
+              scraper:
+                build:
+                  context: ./scraper
+                  dockerfile: Dockerfile
+                container_name: aiartbase-scraper
+                environment:
+                  - API_URL=https://api.aiartbase.com
+                  - OWNER_ID=${OWNER_ID}
+                depends_on:
+                  - backend
+                restart: unless-stopped
+                networks:
+                  - app-network
+
             networks:
               app-network:
                 driver: bridge
