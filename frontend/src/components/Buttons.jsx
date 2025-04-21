@@ -20,20 +20,20 @@ const PurpleButton = ({ name, onClick, w, loading, px = 8, py = 4 }) => {
       fontSize="md"
       fontWeight="600" // Keep font weight slightly bold
       bg={bgColor} // Apply the solid background color
-      boxShadow="md" // Maintain a subtle shadow
+      boxShadow="sm" // Maintain a subtle shadow
       transition="all 0.2s ease-in-out" // Keep transition for smooth bg and shadow changes
       _hover={{
         bg: hoverBgColor, // Darken slightly on hover
-        boxShadow: "lg", // Keep shadow change for visual feedback
+        //boxShadow: "sm", // Keep shadow change for visual feedback
         _disabled: {
           // Ensure disabled styles override hover
           bg: bgColor, // Keep original bg when disabled
-          boxShadow: "md",
+          //boxShadow: "sm",
         },
       }}
       _active={{
         bg: activeBgColor, // Darken more on active
-        boxShadow: "md", // Reset shadow on active press
+        //boxShadow: "sm", // Reset shadow on active press
       }}
       onClick={onClick}
       px={px}
