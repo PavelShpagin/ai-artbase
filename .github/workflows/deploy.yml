@@ -141,6 +141,7 @@ jobs:
                 environment:
                   - API_URL=https://api.aiartbase.com
                   - OWNER_ID=${OWNER_ID}
+                  - OPENAI_API_KEY=${OPENAI_API_KEY}
                 depends_on:
                   - backend
                 restart: unless-stopped

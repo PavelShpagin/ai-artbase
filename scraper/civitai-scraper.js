@@ -93,7 +93,9 @@ const API_URL = process.env.API_URL || "http://localhost:8000";
 const OWNER_ID = parseInt(process.env.OWNER_ID || "4", 10);
 
 // Import OpenAI and initialize
-const openai = new OpenAI();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // Function to check if a link has been processed
 async function isLinkProcessed(link) {
