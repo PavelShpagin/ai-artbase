@@ -116,8 +116,6 @@ const MainGallery = () => {
 
   return (
     <div>
-      <AdSense />
-
       <ArtGallery fetchArts={cachedFetchArts} />
     </div>
   );
