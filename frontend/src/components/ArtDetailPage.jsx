@@ -197,13 +197,24 @@ const ArtDetailPage = () => {
 
   // Handle download
   const handleDownload = async (e) => {
-    e?.stopPropagation();
-    e?.preventDefault();
-
-    if (!art?.src) return;
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
 
     try {
-      const response = await fetch(art.src);
+      // Add cache-busting query parameter
+      const cacheBustUrl = new URL(art.src); // Uses art.src
+      cacheBustUrl.searchParams.set("t", Date.now());
+
+      const response = await fetch(cacheBustUrl, {
+        // Fetches the cache-busted URL
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate", // Adds cache control headers
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+        credentials: "same-origin", // Includes credentials
+      });
+
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.statusText}`);
       }
