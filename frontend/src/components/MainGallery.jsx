@@ -11,6 +11,7 @@ import { useSearchQuery } from "../App";
 import { useLocation } from "react-router-dom";
 import { useUser } from "../contexts/UserContext";
 import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
+import AdSense from "./AdSense";
 
 const MainGallery = () => {
   const { searchQuery, setSearchQuery } = useSearchQuery();
@@ -113,7 +114,13 @@ const MainGallery = () => {
     }
   }, [searchQuery, user]);
 
-  return <ArtGallery fetchArts={cachedFetchArts} />;
+  return (
+    <div>
+      <AdSense />
+
+      <ArtGallery fetchArts={cachedFetchArts} />
+    </div>
+  );
 };
 
 export default MainGallery;
