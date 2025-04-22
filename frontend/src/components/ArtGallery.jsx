@@ -817,7 +817,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
           (!visibleArts || arts.length === 0 || visibleArts.length === 0) && (
             <>
               {location.pathname === "/" ? (
-                <Box width="100%" paddingTop="calc(50vh - 90px)" />
+                <Box width="100%" paddingTop="calc(50vh - 110px)" />
               ) : (
                 <Box width="100%" paddingTop="calc(13vh - 90px)" />
               )}
