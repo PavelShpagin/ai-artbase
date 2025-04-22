@@ -32,9 +32,9 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE $PORT
 
-# Use Gunicorn to run the Uvicorn workers
-CMD ["gunicorn", \
-     "--bind", "0.0.0.0:$PORT", \
-     "--workers", "$WEB_CONCURRENCY", \
-     "--worker-class", "$WORKER_CLASS", \
-     "$MODULE_NAME:$VARIABLE_NAME"]
+# Use Gunicorn to run the Uvicorn workers (Shell form for variable substitution)
+CMD gunicorn \
+     --bind 0.0.0.0:$PORT \
+     --workers $WEB_CONCURRENCY \
+     --worker-class $WORKER_CLASS \
+     $MODULE_NAME:$VARIABLE_NAME
