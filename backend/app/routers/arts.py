@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException, Body, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import case, func, text
+from sqlalchemy import case, func, text, exists, and_, literal, select
 from .. import schemas, models
 from typing import List, Optional
 import uuid
@@ -97,28 +97,34 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
 
 @router.get("/arts/", response_model=List[schemas.Art])
 async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Session = Depends(get_db)):
-    # Count total number of arts in the database
-    total_arts = db.query(func.count(models.Art.id)).scalar()
-    
-    if total_arts == 0:
-        return []
-    
-    # Create a seed based on day to keep the shuffle consistent throughout the day
-    # but change each day for a new shuffle
-    # day_seed = (int(time.time() / 86400) % 10000) / 10000  # 86400 seconds in a day
-    
-    # db.execute(text("SELECT setseed(:seed)"), {"seed": day_seed})
-    # Calculate offset based on current time
-    # This creates a linear progression throughout the day
     current_time_seconds = int(time.time() / 3600)
     time_offset = current_time_seconds % 20000
     
-    # Query arts with offset and limit, ordered by random seed
-    arts = db.query(models.Art).offset(time_offset).limit(limit).all()
-    
+    if viewer_id is not None:
+        # Query arts with liked_by_user information
+        arts = db.query(
+            models.Art,
+            exists().where(
+                and_(
+                    models.Like.art_id == models.Art.id,
+                    models.Like.user_id == viewer_id
+                )
+            ).label('liked_by_user')
+        ).offset(time_offset).limit(limit).all()
+    else:
+        # Query arts without liked_by_user information
+        arts = db.query(
+            models.Art,
+            literal(False).label('liked_by_user')
+        ).offset(time_offset).limit(limit).all()
+
+    # Transform the results into the expected format
     arts_with_likes = [
-        {**art.__dict__, "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False}
-        for art in arts
+        {
+            **art.__dict__,
+            "liked_by_user": liked_by_user
+        }
+        for art, liked_by_user in arts
     ]
     return arts_with_likes
 
@@ -133,27 +139,32 @@ async def search_arts(query: str, user_id: Optional[int] = None, db: Session = D
     # Create a case statement for ordering results according to ChromaDB ranking
     order_case = case({id_: index for index, id_ in enumerate(filtered_ids)}, value=models.Art.id)
     
-    # Remove the joinedload for num_likes since it's a column property, not a relationship
-    arts = db.query(models.Art).filter(models.Art.id.in_(filtered_ids)).order_by(order_case).all()
+    if user_id is not None:
+    # Query arts with liked_by_user information in a single query
+        arts = db.query(
+            models.Art,
+            exists().where(
+                and_(
+                    models.Like.art_id == models.Art.id,
+                    models.Like.user_id == user_id
+                )
+            ).label('liked_by_user')
+        ).filter(models.Art.id.in_(filtered_ids)).order_by(order_case).all()
+    else:
+        # Query arts without liked_by_user information
+        arts = db.query(
+            models.Art,
+            literal(False).label('liked_by_user')
+        ).filter(models.Art.id.in_(filtered_ids)).order_by(order_case).all()
     
-    # Process the "liked_by_user" flag manually
-    arts_with_likes = []
-    for art in arts:
-        # If user_id is provided, check if the user has liked this art
-        liked_by_user = False
-        if user_id is not None:
-            # Query the Like table directly
-            like_exists = db.query(models.Like).filter(
-                models.Like.user_id == user_id, 
-                models.Like.art_id == art.id
-            ).first() is not None
-            liked_by_user = like_exists
-        
-        # Add the art with the liked_by_user flag
-        arts_with_likes.append({
+    # Transform the results into the expected format
+    arts_with_likes = [
+        {
             **art.__dict__,
-            "liked_by_user": liked_by_user
-        })
+            "liked_by_user": liked_by_user if user_id is not None else False
+        }
+        for art, liked_by_user in arts
+    ]
     
     return arts_with_likes
 
@@ -166,37 +177,70 @@ async def read_art_dates(db: Session = Depends(get_db)):
 @router.get("/arts/{user_id}", response_model=List[schemas.Art])
 def get_user_arts(user_id: int, viewer_id: Optional[int] = None, limit: int = 1000, db: Session = Depends(get_db)):
     arts = db.query(models.Art).filter(models.Art.owner_id == user_id).limit(limit).all()
-    arts_with_likes = [
-        {
-            **art.__dict__,
-            "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False
-        }
-        for art in arts
-    ]
+    # Query arts with liked_by_user information in a single query
+    if viewer_id is not None:
+        arts_with_likes = db.query(
+            models.Art,
+            exists().where(
+                and_(
+                    models.Like.art_id == models.Art.id,
+                    models.Like.user_id == viewer_id
+                )
+            ).label('liked_by_user')
+        ).filter(models.Art.id.in_([art.id for art in arts])).all()
+        
+        arts_with_likes = [
+            {
+                **art.__dict__,
+                "liked_by_user": liked_by_user
+            }
+            for art, liked_by_user in arts_with_likes
+        ]
+    else:
+        # Query arts without liked_by_user information
+        arts_with_likes = [
+            {
+                **art.__dict__,
+                "liked_by_user": False
+            }
+            for art in arts
+        ]
     return arts_with_likes
 
 @router.get("/arts/similar/{art_id}", response_model=List[schemas.Art])
 async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Session = Depends(get_db)):
     """Get semantically similar arts based on prompt embedding"""
-    # Fetch the source art
     source_art = db.query(models.Art).filter(models.Art.id == art_id).first()
     if not source_art:
         raise HTTPException(status_code=404, detail="Art not found")
     
-    # Get the prompt from the source art
     prompt = source_art.descriptive_prompt
-    if not prompt:
-        # If no prompt, return random arts
-        arts = db.query(models.Art).filter(models.Art.id != art_id).limit(20).all()
-        return [
-            {
-                **art.__dict__,
-                "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False
-            }
-            for art in arts
-        ]
     
-    # Query ChromaDB for similar prompts
+    if not prompt:
+        # If no prompt, return random arts with like status
+        if viewer_id is not None:
+            arts_query = db.query(
+                models.Art,
+                exists().where(
+                    and_(
+                        models.Like.art_id == models.Art.id,
+                        models.Like.user_id == viewer_id
+                    )
+                ).label('liked_by_user')
+            ).filter(models.Art.id != art_id).limit(20)
+        else:
+            arts_query = db.query(
+                models.Art,
+                literal(False).label('liked_by_user')
+            ).filter(models.Art.id != art_id).limit(20)
+            
+        arts_result = arts_query.all()
+        
+        return [
+            {**art.__dict__, "liked_by_user": liked_by_user}
+            for art, liked_by_user in arts_result
+        ]
+
     try:
         results = collection_prompts.query(
             query_texts=[prompt],
@@ -204,29 +248,62 @@ async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Ses
             include=["documents", "distances", "metadatas"]
         )
         
-        similar_ids = results['ids'][0]
-        similar_arts = db.query(models.Art)\
-            .filter(models.Art.id.in_(similar_ids))\
-            .all()
+        similar_ids = [int(id) for id in results['ids'][0] if int(id) != art_id] # Exclude the source art itself
+        
+        if not similar_ids:
+            return []
+
+        # Query similar arts with like status
+        if viewer_id is not None:
+            arts_query = db.query(
+                models.Art,
+                exists().where(
+                    and_(
+                        models.Like.art_id == models.Art.id,
+                        models.Like.user_id == viewer_id
+                    )
+                ).label('liked_by_user')
+            ).filter(models.Art.id.in_(similar_ids))
+        else:
+            arts_query = db.query(
+                models.Art,
+                literal(False).label('liked_by_user')
+            ).filter(models.Art.id.in_(similar_ids))
+            
+        # Preserve ChromaDB order if needed (requires adjusting the query)
+        # For simplicity, current implementation doesn't preserve ChromaDB order
+        # If order preservation is crucial, we'd need a CASE statement like in search_arts
+        arts_result = arts_query.all() 
         
         return [
-            {
-                **art.__dict__,
-                "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False
-            }
-            for art in similar_arts
+            {**art.__dict__, "liked_by_user": liked_by_user}
+            for art, liked_by_user in arts_result
         ]
       
     except Exception as e:
-        # Fallback to random arts if ChromaDB query fails
-        print(f"ChromaDB query failed: {str(e)}")
-        arts = db.query(models.Art).filter(models.Art.id != art_id).limit(20).all()
+        print(f"ChromaDB query or subsequent database query failed: {str(e)}")
+        # Fallback to random arts with like status
+        if viewer_id is not None:
+            arts_query = db.query(
+                models.Art,
+                exists().where(
+                    and_(
+                        models.Like.art_id == models.Art.id,
+                        models.Like.user_id == viewer_id
+                    )
+                ).label('liked_by_user')
+            ).filter(models.Art.id != art_id).limit(20)
+        else:
+            arts_query = db.query(
+                models.Art,
+                literal(False).label('liked_by_user')
+            ).filter(models.Art.id != art_id).limit(20)
+            
+        arts_result = arts_query.all()
+        
         return [
-            {
-                **art.__dict__,
-                "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False
-            }
-            for art in arts
+            {**art.__dict__, "liked_by_user": liked_by_user}
+            for art, liked_by_user in arts_result
         ]
 
 @router.get("/arts/id/{art_id}", response_model=schemas.Art)
@@ -293,16 +370,35 @@ async def get_user_liked_arts(user_id: int, viewer_id: Optional[int] = None, lim
     if not art_ids:
         return []
     
-    # Get all the arts that the user liked, ordered by art ID
-    arts = db.query(models.Art).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit).all()
-    
+    # Get all the arts that the user liked, ordered by art ID, along with viewer's like status
+    if viewer_id is not None:
+        arts_query = db.query(
+            models.Art,
+            exists().where(
+                and_(
+                    models.Like.art_id == models.Art.id,
+                    models.Like.user_id == viewer_id
+                )
+            ).label('liked_by_user')
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit)
+    else:
+        # If no viewer_id, liked_by_user is always False (unless viewer_id matches user_id, handled implicitly)
+        arts_query = db.query(
+            models.Art,
+             # Determine liked_by_user based on whether viewer_id matches the user_id whose likes we are fetching
+            (models.Like.user_id == viewer_id if viewer_id is not None else literal(False)).label('liked_by_user')
+        ).outerjoin(models.Like, and_(models.Like.art_id == models.Art.id, models.Like.user_id == viewer_id)) \
+         .filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit)
+         
+    arts_result = arts_query.all()
+
     # Include the "liked_by_user" flag in the response
     arts_with_likes = [
         {
             **art.__dict__,
-            "liked_by_user": any(like.user_id == viewer_id for like in art.likes) if viewer_id else False
+            "liked_by_user": liked_by_user
         }
-        for art in arts
+        for art, liked_by_user in arts_result
     ]
     
     return arts_with_likes

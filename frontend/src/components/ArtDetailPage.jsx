@@ -328,8 +328,9 @@ const ArtDetailPage = () => {
           {art ? (
             <>
               <Box
+                id="art-detail-image"
                 position="relative"
-                width={`min(80vw, 70vh * (${art.width} / ${art.height}))`}
+                width={`min(70vh * (${art.width} / ${art.height}))`}
                 aspectRatio={`${art.width} / ${art.height}`}
                 background="rgb(229, 231, 235)"
                 borderRadius="lg"
