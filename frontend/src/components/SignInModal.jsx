@@ -154,12 +154,7 @@ const SignInModal = ({ isOpen, onClose }) => {
   return (
     <Modal isOpen={isOpen} onClose={handleClose} isCentered>
       <ModalOverlay bg="blackAlpha.600" />
-      <ModalContent
-        bg={modalBg}
-        borderRadius="xl"
-        boxShadow="xl"
-        className="px-4 sm:px-6"
-      >
+      <ModalContent bg={modalBg} borderRadius="xl" boxShadow="xl" mx={4}>
         <ModalHeader fontWeight="bold" borderTopRadius="xl">
           Sign Up / Sign In
         </ModalHeader>

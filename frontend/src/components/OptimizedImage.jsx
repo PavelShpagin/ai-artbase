@@ -11,7 +11,7 @@ const OptimizedImage = ({
   ...props
 }) => {
   // Construct the optimized image URL
-  // const optimizedSrc = `https://cdn.aiartbase.com/cdn-cgi/image/width=${width},height=${height},fit=contain/${src}`;
+  //const optimizedSrc = `https://cdn.aiartbase.com/cdn-cgi/image/width=${width},height=${height},fit=contain/${src}`;
   const optimizedSrc = src;
 
   return (

@@ -329,15 +329,8 @@ const ArtDetailPage = () => {
             <>
               <Box
                 position="relative"
-                height={`${
-                  imageContainerRef.current.offsetWidth *
-                  (art.height / art.width)
-                }px`}
-                //maxWidth="80vw"
-                width={`min(80vw,${
-                  imageContainerRef.current.offsetHeight *
-                  (art.width / art.height)
-                }px)`}
+                width={`min(80vw, 70vh * (${art.width} / ${art.height}))`}
+                aspectRatio={`${art.width} / ${art.height}`}
                 background="rgb(229, 231, 235)"
                 borderRadius="lg"
                 overflow="hidden"

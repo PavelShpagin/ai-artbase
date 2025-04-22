@@ -19,7 +19,14 @@ import fetchAPI from "../services/api";
 import useArtLikes from "../hooks/useArtLikes";
 
 // Create a separate component for image rendering
-const ImageItem = ({ photo, left, top, onClick, getPathKey }) => {
+const ImageItem = ({
+  photo,
+  left,
+  top,
+  onClick,
+  getPathKey,
+  setHasRenderedFirstImage,
+}) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionHovered, setIsActionHovered] = useState(false);
   const { user } = useUser();
@@ -138,6 +145,9 @@ const ImageItem = ({ photo, left, top, onClick, getPathKey }) => {
         loading="lazy"
         onLoad={(e) => {
           e.target.style.opacity = 1;
+          if (setHasRenderedFirstImage) {
+            setHasRenderedFirstImage(true);
+          }
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -295,6 +305,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   const [layoutHeight, setLayoutHeight] = useState(0);
   const [visibleArts, setVisibleArts] = useState([]);
   const [arts, setArts] = useState([]);
+  const [hasRenderedFirstImage, setHasRenderedFirstImage] = useState(false);
   const navType = useNavigationType();
 
   // Add a ref to track the current path
@@ -503,6 +514,9 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     )
       return;
 
+    const sentinel = loaderRef.current;
+    if (!sentinel) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && arts.length > page * ITEMS_PER_PAGE) {
@@ -529,16 +543,16 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
             if (location.pathname !== currentPathRef.current) return;
             setVisibleArts(imageData);
             setPage((prev) => prev + 1);
-          }, 300);
+          }, 100);
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.1 }
     );
 
-    observer.observe(loaderRef.current);
+    observer.observe(sentinel);
 
     return () => observer.disconnect();
-  }, [stageStatus, arts, page, loaderRef, galleryRef]);
+  }, [stageStatus, arts, page, loaderRef, galleryRef, hasRenderedFirstImage]);
 
   // Track layout height changes
   useLayoutEffect(() => {
@@ -603,13 +617,14 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   // Handle navigation and save scroll position
   const handleClick = (event, { photo }) => {
     sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
+    setHasRenderedFirstImage(false);
     if (setArt) {
       setArt(null);
     }
     navigate(`/${photo.id}`, { state: { photo } });
   };
 
-  // Custom renderer for images - now passes getPathKey to the ImageItem component
+  // Custom renderer for images - now passes onFirstLoad to the ImageItem component
   const imageRenderer = ({ index, left, top, key, photo }) => {
     return (
       <ImageItem
@@ -619,6 +634,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         top={top}
         onClick={handleClick}
         getPathKey={getPathKey}
+        setHasRenderedFirstImage={setHasRenderedFirstImage}
       />
     );
   };
@@ -688,6 +704,10 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   };
   // --- End placeholder logic ---
 
+  useEffect(() => {
+    setHasRenderedFirstImage(false);
+  }, [location.pathname, searchQuery]);
+
   // --- DOM Check Logic ---
   // Note: Directly querying DOM in render can be fragile. Consider useEffect for robustness.
   let shouldShowSpinnerBasedOnDOM = false;
@@ -700,7 +720,6 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       shouldShowSpinnerBasedOnDOM = true;
     }
   }
-  // --- End DOM Check Logic ---
 
   return (
     <>
@@ -714,7 +733,8 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
           left={0}
           opacity={0}
           pointerEvents="none"
-          aria-hidden="true"
+          //aria-hidden="true"
+          bg="red"
         />
 
         {/* ---- Absolute positioned Loading Spinner for Infinite Scroll ---- */}
@@ -756,29 +776,15 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
               onClick={handleClick}
               renderImage={imageRenderer}
             />
-            {/* Invisible loader reference for infinite scrolling */}
-            {/* <Box
-              ref={loaderRef}
-              position="absolute"
-              width="100%"
-              height="20px"
-              bottom="0"
-              left="0"
-              opacity="0"
-              pointerEvents="none"
-              aria-hidden="true"
-            /> */}
-            {/* ---- Loading Spinner for Infinite Scroll ---- */}
-            {/* <p>
-              hello {document.querySelector(".react-photo-gallery--gallery")}
-            </p>
-            {/* Show only after initial gallery is visible AND there are more arts to load */}
-            {/* {document.querySelector(".react-photo-gallery--gallery") &&
-              stageStatus.stageInitialRenderComplete && // Ensure initial render is done
-              visibleArts.length > 0 && // Ensure gallery is visible
-              visibleArts.length < arts.length && ( // Ensure there are more arts to load
+            {/* Infinite scroll spinner - only show after at least one image has rendered */}
+
+            {/* <Box ref={loaderRef} height="1px" /> */}
+            {hasRenderedFirstImage &&
+              stageStatus.stageInitialRenderComplete &&
+              visibleArts.length > 0 &&
+              visibleArts.length < arts.length && (
                 <Box
-                  ref={loaderRef} // loaderRef is now attached here
+                  ref={loaderRef}
                   display="flex"
                   justifyContent="center"
                   width="100%"
@@ -787,7 +793,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
                 >
                   <Spinner size="md" thickness="4px" color="gray.200" />
                 </Box>
-              )} */}
+              )}
           </div>
         )}
 
@@ -808,6 +814,48 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         )}
 
         {(arts.length > 0 || !stageStatus.stageFetchingComplete) &&
+          (!visibleArts || arts.length === 0 || visibleArts.length === 0) && (
+            <>
+              {location.pathname === "/" ? (
+                <Box width="100%" paddingTop="40vh" />
+              ) : (
+                <Box width="100%" paddingTop="calc(11vh - 60px)" />
+              )}
+              <Box
+                display="flex"
+                justifyContent="center"
+                width="100%"
+                paddingTop="16px"
+                paddingBottom="16px"
+              >
+                <Spinner
+                  size={location.pathname === "/" ? "lg" : "md"}
+                  thickness={location.pathname === "/" ? "5px" : "4px"}
+                  color="gray.200"
+                />
+              </Box>
+            </>
+          )}
+
+        {/* {stageStatus.stageInitialRenderComplete &&
+          visibleArts.length < arts.length && (
+            <Box
+              ref={loaderRef}
+              display="flex"
+              justifyContent="center"
+              width="100%"
+              paddingTop="16px"
+              paddingBottom="16px"
+            >
+              <Spinner
+                size={location.pathname === "/" ? "lg" : "lg"}
+                thickness={location.pathname === "/" ? "5px" : "5px"}
+                color="gray.200"
+              />
+            </Box>
+          )} */}
+
+        {/* {(arts.length > 0 || !stageStatus.stageFetchingComplete) &&
           (!visibleArts ||
             arts.length === 0 ||
             visibleArts.length < arts.length) && (
@@ -830,7 +878,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
                 />
               </Box>
             </>
-          )}
+          )} */}
       </div>
     </>
   );
