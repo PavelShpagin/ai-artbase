@@ -51,8 +51,11 @@ jobs:
           script: |
             cd /root/aiartbase
 
+            docker compose down
             # Clean up disk space if needed
             docker system prune -af
+
+            docker volume rm $(docker volume ls -q)
 
             # Pull latest images
             docker pull pavelshpagin/aiartbase-backend:latest
@@ -88,7 +91,7 @@ jobs:
                   - POSTGRES_PASSWORD=pirate228
                   - POSTGRES_DB=Ai_ArtBase
                 volumes:
-                  - postgres_data:/var/lib/postgresql/data
+                  - ./volumes/postgres_data:/var/lib/postgresql/data
                 restart: unless-stopped
                 networks:
                   - app-network
@@ -152,10 +155,6 @@ jobs:
               app-network:
                 driver: bridge
 
-            volumes:
-              postgres_data:
-
             EOF
 
-            docker compose down
             docker compose up -d
