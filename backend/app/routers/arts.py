@@ -98,7 +98,7 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
 @router.get("/arts/", response_model=List[schemas.Art])
 async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Session = Depends(get_db)):
     current_time_seconds = int(time.time() / 3600)
-    time_offset = current_time_seconds % 1200
+    time_offset = current_time_seconds % 800
     
     if viewer_id is not None:
         # Query arts with liked_by_user information
@@ -114,7 +114,7 @@ async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Sess
             models.ArtMetadata, 
             models.ArtMetadata.art_id == models.Art.id
         ).filter(
-            models.ArtMetadata.upvotes >= 20
+            models.ArtMetadata.upvotes >= 25
         ).offset(time_offset).limit(limit).all()
     else:
         # Query arts without liked_by_user information
