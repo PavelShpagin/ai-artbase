@@ -18,9 +18,9 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 origins = [
-    # "http://localhost:5173",
-    # "https://aiartbase.com", #production domain
-    "*",
+    "http://localhost:5173",
+    "https://aiartbase.com", #production domain
+    # "*",
 ]
 
 app.add_middleware(
