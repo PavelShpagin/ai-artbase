@@ -1,4 +1,5 @@
-export const BASE_URL = "https://api.aiartbase.com";
+export const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "https://api.aiartbase.com";
 
 const fetchAPI = async (
   endpoint,
