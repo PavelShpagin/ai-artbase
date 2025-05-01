@@ -13,6 +13,9 @@ import {
   ModalFooter,
   Box,
   useDisclosure,
+  useColorModeValue,
+  FormControl,
+  FormErrorMessage,
 } from "@chakra-ui/react";
 import PurpleButton from "./Buttons";
 import fetchAPI from "../services/api";
@@ -27,6 +30,11 @@ const ImageUploadModal = () => {
   const [imageWidth, setImageWidth] = useState("auto");
   const [isPublishing, setIsPublishing] = useState(false);
   const { user, setUser } = useUser();
+
+  const inputBg = useColorModeValue("gray.100", "gray.700");
+  const inputHoverBg = useColorModeValue("gray.200", "gray.600");
+  const focusBorderColor = useColorModeValue("purple.500", "purple.300");
+  const modalBg = useColorModeValue("white", "gray.800");
 
   const handleFilesSelected = (event) => {
     const file = event.target.files[0];
@@ -82,8 +90,10 @@ const ImageUploadModal = () => {
       />
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
-        <ModalContent maxWidth={imageWidth}>
-          <ModalHeader fontWeight={"bold"}>Upload AI Art</ModalHeader>
+        <ModalContent maxWidth={imageWidth} bg={modalBg} borderRadius="xl">
+          <ModalHeader fontWeight={"bold"} borderTopRadius="xl">
+            Upload AI Art
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <Flex direction="column" align="center">
@@ -99,13 +109,26 @@ const ImageUploadModal = () => {
                 placeholder="Enter prompt for this image"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                onClick={(e) => setPromptError(false)}
-                borderColor={promptError ? "red.500" : undefined}
-                borderWidth={2}
+                bg={inputBg}
+                _hover={{ bg: inputHoverBg }}
+                _focus={{
+                  borderColor: focusBorderColor,
+                  boxShadow: `0 0 0 1px ${focusBorderColor}`,
+                  bg: inputBg,
+                }}
+                borderRadius="xl"
+                size="lg"
+                isInvalid={promptError}
+                onClick={() => setPromptError(false)}
               />
               {promptError && (
-                <Box color="red.500" mt={1}>
-                  This box shouldn't be empty.
+                <Box
+                  color="red.500"
+                  mt={1}
+                  fontSize="sm"
+                  alignSelf="flex-start"
+                >
+                  Prompt cannot be empty.
                 </Box>
               )}
             </Flex>

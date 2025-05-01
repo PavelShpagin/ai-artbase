@@ -426,7 +426,7 @@ const Header = () => {
                 />
               </Box>
               {/* Hidden File Input */}
-              <Input
+              {/* <Input
                 type="file"
                 id="file-upload"
                 style={{ display: "none" }}
@@ -438,7 +438,7 @@ const Header = () => {
                   e.target.value = null;
                 }}
                 accept="image/*" // Specify acceptable file types
-              />
+              /> */}
               {/* User Menu */}
               <UserMenu
                 user={user}

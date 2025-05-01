@@ -186,7 +186,7 @@ async def read_art_dates(db: Session = Depends(get_db)):
 
 @router.get("/arts/{user_id}", response_model=List[schemas.Art])
 def get_user_arts(user_id: int, viewer_id: Optional[int] = None, limit: int = 1000, db: Session = Depends(get_db)):
-    arts = db.query(models.Art).filter(models.Art.owner_id == user_id).limit(limit).all()
+    arts = db.query(models.Art).filter(models.Art.owner_id == user_id).order_by(models.Art.date.desc()).limit(limit).all()
     # Query arts with liked_by_user information in a single query
     if viewer_id is not None:
         arts_with_likes = db.query(

@@ -256,11 +256,28 @@ def process_duplicates():
 
 if __name__ == "__main__":
     # Check required PostgreSQL variables
-    required_pg_vars = ["DATABASE_URL", "PG_TABLE", "PG_URL_COLUMN", "PG_ID_COLUMN"]
-    missing_vars = [var for var in required_pg_vars if not os.getenv(var)]
-    if missing_vars:
-        print(f"Error: Missing required PostgreSQL environment variables: {', '.join(missing_vars)}", file=sys.stderr)
+    # Use the actual variable names defined in the configuration section
+    required_pg_env_vars = ["DATABASE_URL"] # Only DATABASE_URL is strictly required from env if others have defaults
+    config_vars_to_check = {
+        "DATABASE_URL": DATABASE_URL,
+        "PG_TABLE_NAME": PG_TABLE_NAME,
+        "PG_URL_COLUMN_NAME": PG_URL_COLUMN_NAME,
+        "PG_ID_COLUMN_NAME": PG_ID_COLUMN_NAME
+    }
+
+    missing_env_vars = [var for var in required_pg_env_vars if not os.getenv(var)]
+    if missing_env_vars:
+         print(f"Error: Missing required environment variables: {', '.join(missing_env_vars)}", file=sys.stderr)
+         sys.exit(1)
+
+    # Optional: Check if the config variables (potentially from defaults) are non-empty
+    # This ensures that even if not set by env, the defaults are valid
+    missing_config_vars = [name for name, value in config_vars_to_check.items() if not value]
+    if missing_config_vars:
+        print(f"Error: Configuration values missing or empty for: {', '.join(missing_config_vars)}", file=sys.stderr)
+        print("Ensure these are set either via environment variables or have valid defaults in the script.", file=sys.stderr)
         sys.exit(1)
+
 
     # Check ChromaDB variables only if host is set (collection name is now required if host is set)
     if os.getenv("CHROMA_HOST") and not os.getenv("CHROMA_COLLECTION_NAME"):
