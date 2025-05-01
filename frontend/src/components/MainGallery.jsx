@@ -14,7 +14,8 @@ import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
 import AdSense from "./AdSense";
 
 const MainGallery = () => {
-  const { searchQuery, setSearchQuery } = useSearchQuery();
+  const { searchQuery, setSearchQuery, uiSearchQuery, setUiSearchQuery } =
+    useSearchQuery();
   const { user } = useUser();
   const prevSearchQueryRef = useRef(searchQuery);
   const location = useLocation();
@@ -24,6 +25,7 @@ const MainGallery = () => {
     const handlePopState = (e) => {
       const query = e?.state?.state || "";
       setSearchQuery(query);
+      setUiSearchQuery(query);
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -32,16 +34,16 @@ const MainGallery = () => {
 
   const cachedFetchArts = useCallback(async () => {
     try {
-      if (prevSearchQueryRef.current.length === 0 && searchQuery.length === 1) {
-        window.history.pushState({ state: searchQuery }, "", "/");
-      } else if (
-        prevSearchQueryRef.current.length === 1 &&
-        searchQuery.length === 0
-      ) {
-        window.history.popState();
-      } else {
-        window.history.replaceState({ state: searchQuery }, "", "/");
-      }
+      // if (prevSearchQueryRef.current.length === 0 && searchQuery.length === 1) {
+      //   window.history.pushState({ state: searchQuery }, "", "/");
+      // } else if (
+      //   prevSearchQueryRef.current.length === 1 &&
+      //   searchQuery.length === 0
+      // ) {
+      //   window.history.popState();
+      // } else {
+      //   window.history.replaceState({ state: searchQuery }, "", "/");
+      // }
 
       prevSearchQueryRef.current = searchQuery;
 

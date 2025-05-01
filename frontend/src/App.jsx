@@ -19,8 +19,11 @@ const SearchQueryContext = createContext();
 
 export const SearchQueryProvider = ({ children }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [uiSearchQuery, setUiSearchQuery] = useState("");
   return (
-    <SearchQueryContext.Provider value={{ searchQuery, setSearchQuery }}>
+    <SearchQueryContext.Provider
+      value={{ searchQuery, setSearchQuery, uiSearchQuery, setUiSearchQuery }}
+    >
       {children}
     </SearchQueryContext.Provider>
   );

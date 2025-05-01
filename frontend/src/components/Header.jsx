@@ -146,14 +146,14 @@ const UserMenu = ({ onSignOut }) => {
 
 const Header = () => {
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
-  const { searchQuery, setSearchQuery } = useSearchQuery();
+  const { searchQuery, setSearchQuery, uiSearchQuery, setUiSearchQuery } =
+    useSearchQuery();
   const prevSearchQueryRef = useRef(searchQuery);
   const { isOpen, onOpen, onClose } = useDisclosure(); // Note: This disclosure might conflict if UserMenu uses it internally without its own instance. UserMenu seems to handle its own state correctly.
   const { user, setUser } = useUser();
   const [isFilterOpen, setIsFilterOpen] = useState(false); // Keep this for modal logic if needed later
   const searchBarRef = useRef(null);
   const [modalStyle, setModalStyle] = useState({}); // Keep this for modal logic
-  const [uiSearchQuery, setUiSearchQuery] = useState("");
   const navigate = useNavigate();
 
   // Fetch categories logic remains the same
@@ -335,6 +335,10 @@ const Header = () => {
                 // The search query is already being set via onChange
                 // Any additional search submission logic would go here
                 setSearchQuery(e.target.value);
+                setUiSearchQuery(e.target.value);
+                window.history.pushState({ state: e.target.value }, "", "/");
+                // Unfocus (blur) the input field when Enter is pressed
+                e.currentTarget.blur();
               }
             }}
             onChange={(e) => setUiSearchQuery(e.target.value)}
