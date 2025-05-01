@@ -133,8 +133,8 @@ const ImageItem = ({
       <OptimizedImage
         src={photo.src}
         alt=""
-        width={photo.width}
-        height={photo.height}
+        width={photo.width * 2}
+        height={photo.height * 2}
         style={{
           width: "100%",
           height: "100%",

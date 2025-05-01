@@ -11,9 +11,9 @@ from urllib.parse import urlparse
 # --- Configuration from Environment Variables ---
 # PostgreSQL
 DATABASE_URL = os.getenv("DATABASE_URL")
-PG_TABLE_NAME = os.getenv("PG_TABLE", "arts")
-PG_URL_COLUMN_NAME = os.getenv("PG_URL_COLUMN", "src")
-PG_ID_COLUMN_NAME = os.getenv("PG_ID_COLUMN", "id") # IMPORTANT: Assumes IDs are strings or convertible
+PG_TABLE_NAME = "arts"
+PG_URL_COLUMN_NAME = "src"
+PG_ID_COLUMN_NAME = "id" # IMPORTANT: Assumes IDs are strings or convertible
 
 # ChromaDB Configuration (only for ID checking)
 CHROMA_HOST = "chromadb" # Required if checking Chroma
