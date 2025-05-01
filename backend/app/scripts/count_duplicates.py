@@ -5,26 +5,28 @@ from collections import Counter, defaultdict
 import concurrent.futures
 import os
 import sys
-import chromadb
 from urllib.parse import urlparse
+import time # Import time for potential delays
 
 # --- Configuration from Environment Variables ---
 # PostgreSQL
 DATABASE_URL = os.getenv("DATABASE_URL")
-PG_TABLE_NAME = "arts"
-PG_URL_COLUMN_NAME = "src"
-PG_ID_COLUMN_NAME = "id" # IMPORTANT: Assumes IDs are strings or convertible
+PG_TABLE_NAME = os.getenv("PG_TABLE_NAME", "arts")
+PG_URL_COLUMN_NAME = os.getenv("PG_URL_COLUMN_NAME", "src")
+PG_ID_COLUMN_NAME = os.getenv("PG_ID_COLUMN_NAME", "id") # Assumes INT/BIGINT for deletion
 
-# ChromaDB Configuration (only for ID checking)
-CHROMA_HOST = "chromadb" # Required if checking Chroma
-CHROMA_PORT = "8001"
-CHROMA_COLLECTION_NAME = "Prompts" # Required if checking Chroma
+# Optional: Metadata table configuration
+PG_METADATA_TABLE_NAME = os.getenv("PG_METADATA_TABLE_NAME", "art_metadata")
+PG_METADATA_FK_COLUMN_NAME = os.getenv("PG_METADATA_FK_COLUMN_NAME", "art_id")
 
 # --- Script Configuration ---
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", 10))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", 20))
 MAX_IMAGE_SIZE_MB = int(os.getenv("MAX_IMAGE_SIZE_MB", 50))
 MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
+DELETE_DELAY_SECONDS = float(os.getenv("DELETE_DELAY_SECONDS", 0.1)) # Optional delay
+# DRY_RUN is now controlled solely by environment variable
+DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
 
 # --- Helper Functions ---
 
@@ -48,12 +50,12 @@ def fetch_pg_image_data(conn):
     try:
         with conn.cursor() as cur:
             print(f"Fetching IDs ('{PG_ID_COLUMN_NAME}') and URLs ('{PG_URL_COLUMN_NAME}') from PostgreSQL table '{PG_TABLE_NAME}'...")
-            # Ensure ID column is selected first
+            # Fetch ID as integer for deletion purposes
             query = f"SELECT {PG_ID_COLUMN_NAME}, {PG_URL_COLUMN_NAME} FROM {PG_TABLE_NAME} WHERE {PG_URL_COLUMN_NAME} IS NOT NULL AND {PG_URL_COLUMN_NAME} <> '';"
             cur.execute(query)
             results = cur.fetchall()
-            # Ensure IDs are stored as strings, as Chroma expects string IDs
-            data = [(str(row[0]), row[1]) for row in results if row[0] is not None and row[1]]
+            # Keep original ID type (assuming int/bigint) for deletion
+            data = [(row[0], row[1]) for row in results if row[0] is not None and row[1]]
             print(f"Fetched {len(data)} valid (ID, URL) pairs from PostgreSQL.")
     except psycopg2.Error as e:
         print(f"PostgreSQL error fetching data: {e}", file=sys.stderr)
@@ -98,46 +100,25 @@ def download_and_hash_image(item_id, url):
         print(f"Unexpected error processing URL {url} (ID: {item_id}): {e}", file=sys.stderr)
         return item_id, None, f"unexpected_error:_{type(e).__name__}"
 
-def check_chroma_ids_exist(ids_to_check):
-    """Checks which of the given IDs exist in the ChromaDB collection."""
-    if not ids_to_check:
-        return 0 # No IDs to check
+def get_ids_with_metadata(conn, id_list):
+    """Check which IDs from the list exist in the metadata table."""
+    if not id_list or not PG_METADATA_TABLE_NAME or not PG_METADATA_FK_COLUMN_NAME:
+        return set()
 
-    found_count = 0
-    ids_list = list(ids_to_check) # Ensure it's a list for Chroma client
-    print(f"\nChecking {len(ids_list)} PostgreSQL duplicate IDs against ChromaDB collection '{CHROMA_COLLECTION_NAME}'...")
-
+    ids_with_metadata = set()
     try:
-        chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
-        # Optional: Heartbeat check
-        try: chroma_client.heartbeat(); print("ChromaDB connection successful.")
-        except Exception as e: print(f"Warning: ChromaDB heartbeat failed: {e}. Proceeding...", file=sys.stderr)
-
-        collection = chroma_client.get_collection(name=CHROMA_COLLECTION_NAME)
-
-        # ChromaDB's get expects a list of string IDs.
-        # It returns only the items that *were* found.
-        # We need to handle potential errors during the get call itself.
-        batch_size = 500 # Check IDs in batches to avoid overly large requests
-        for i in range(0, len(ids_list), batch_size):
-            batch_ids = ids_list[i:i+batch_size]
-            try:
-                results = collection.get(ids=batch_ids, include=[]) # We only care about existence, not data
-                found_count += len(results.get('ids', []))
-                print(f"Checked batch {i//batch_size + 1}/{(len(ids_list) + batch_size - 1)//batch_size}, found so far: {found_count}")
-            except Exception as batch_e:
-                 # Log error for the specific batch but continue if possible
-                 print(f"Error checking ChromaDB ID batch starting at index {i}: {batch_e}", file=sys.stderr)
-
-
-        print(f"Finished ChromaDB check. Found {found_count} matching IDs.")
-        return found_count
-
-    except Exception as e:
-        print(f"CRITICAL: Failed to connect to or query ChromaDB at {CHROMA_HOST}:{CHROMA_PORT}", file=sys.stderr)
-        print(f"Error: {e}", file=sys.stderr)
-        print("Cannot determine coincidence count. Returning 0.", file=sys.stderr)
-        return 0 # Indicate failure to check
+        with conn.cursor() as cur:
+            # Use tuple for IN clause
+            ids_tuple = tuple(id_list)
+            # Construct query safely
+            query = f"SELECT {PG_METADATA_FK_COLUMN_NAME} FROM {PG_METADATA_TABLE_NAME} WHERE {PG_METADATA_FK_COLUMN_NAME} IN %s;"
+            cur.execute(query, (ids_tuple,))
+            results = cur.fetchall()
+            ids_with_metadata = {row[0] for row in results}
+    except psycopg2.Error as e:
+        print(f"Warning: Error checking metadata for IDs {id_list}: {e}", file=sys.stderr)
+        # Continue without metadata check for this batch if query fails
+    return ids_with_metadata
 
 # --- Main Execution ---
 
@@ -147,6 +128,9 @@ def process_duplicates():
     hashes_to_pg_ids = defaultdict(list) # Map: hash -> list of PG IDs
     error_summary = Counter()
     total_pg_items = 0
+    ids_to_delete = []
+    total_deleted_count = 0
+    kept_ids_info = {} # hash -> kept_id
 
     # 1. Connect to PostgreSQL and Fetch Data
     pg_connection_params = parse_database_url(DATABASE_URL)
@@ -162,6 +146,7 @@ def process_duplicates():
         total_pg_items = len(pg_data)
     except Exception as e: # Catch potential fetch errors too
         print(f"\nCRITICAL: Failed to connect to or fetch data from PostgreSQL: {e}", file=sys.stderr)
+        if pg_conn: pg_conn.close() # Ensure connection is closed on error
         sys.exit(1)
 
     if not pg_data:
@@ -187,7 +172,7 @@ def process_duplicates():
                      continue # Skip this result
 
                 if img_hash and status == "success":
-                    hashes_to_pg_ids[img_hash].append(original_id)
+                    hashes_to_pg_ids[img_hash].append(original_id) # Keep original ID type
                 elif status != "success":
                     error_summary[status] += 1
 
@@ -201,58 +186,127 @@ def process_duplicates():
 
     print(f"\nFinished hashing {processed_count} PostgreSQL items.")
 
-    # 3. Analyze Hashes for PostgreSQL Duplicates
-    postgres_duplicate_instances = 0
-    duplicate_pg_ids = set() # Set of unique PG IDs that are part of any duplicate group
+    # 3. Identify PostgreSQL Duplicates, Preferring those with Metadata
+    postgres_duplicate_instances_found = 0
+    print("\n--- Analyzing PostgreSQL Hashes for Deletion (Preferring Metadata) ---")
+    can_check_metadata = bool(PG_METADATA_TABLE_NAME and PG_METADATA_FK_COLUMN_NAME)
+    if not can_check_metadata:
+        print("Metadata table/column not configured. Will keep the first encountered ID for duplicates.")
 
-    print("\n--- Analyzing PostgreSQL Hashes ---")
     for img_hash, id_list in hashes_to_pg_ids.items():
         if len(id_list) > 1:
-            # This hash represents a duplicate image within PostgreSQL
-            duplicates_in_group = len(id_list) - 1
-            postgres_duplicate_instances += duplicates_in_group
-            # Add all IDs from this duplicate group to the set
-            duplicate_pg_ids.update(id_list)
-            # print(f"  Hash {img_hash[:8]}... found {len(id_list)} times (IDs: {id_list})") # Debugging
+            keep_id = None
+            delete_ids_for_this_hash = []
 
-    print(f"Total duplicate instances found in PostgreSQL: {postgres_duplicate_instances}")
-    print(f"Total unique PostgreSQL IDs involved in duplicates: {len(duplicate_pg_ids)}")
+            if can_check_metadata:
+                ids_with_meta = get_ids_with_metadata(pg_conn, id_list)
+                if len(ids_with_meta) == 1:
+                    # Ideal case: Exactly one has metadata, keep it.
+                    keep_id = list(ids_with_meta)[0]
+                    print(f"  Hash {img_hash[:8]}... Found {len(id_list)} instances. Keeping ID {keep_id} (has metadata).")
+                elif len(ids_with_meta) > 1:
+                    # Multiple have metadata, keep the first one found with metadata, warn user.
+                    keep_id = sorted(list(ids_with_meta))[0] # Keep the smallest ID among those with metadata
+                    print(f"  Warning: Hash {img_hash[:8]}... Found {len(id_list)} instances. Multiple ({len(ids_with_meta)}) have metadata: {ids_with_meta}. Keeping first: {keep_id}.")
+                # else len(ids_with_meta) == 0 - handled below
+            
+            if keep_id is None:
+                 # No metadata check possible, or none had metadata. Keep the first encountered ID.
+                 keep_id = id_list[0]
+                 if can_check_metadata: # Only print this if we tried and failed
+                     print(f"  Hash {img_hash[:8]}... Found {len(id_list)} instances. None have metadata. Keeping first encountered: {keep_id}.")
+                 # else: just keep first silently if metadata check was disabled.
 
-    # 4. Check Coincidence in ChromaDB (if configured)
-    chromadb_coincident_duplicate_count = 0
-    if CHROMA_HOST and CHROMA_COLLECTION_NAME:
-        if not duplicate_pg_ids:
-            print("\nNo duplicates found in PostgreSQL, skipping ChromaDB check.")
+            # Add all other IDs to the delete list
+            delete_ids_for_this_hash = [id_ for id_ in id_list if id_ != keep_id]
+            ids_to_delete.extend(delete_ids_for_this_hash)
+            postgres_duplicate_instances_found += len(delete_ids_for_this_hash)
+            kept_ids_info[img_hash] = keep_id # Store which ID was kept for this hash
+
+    print(f"\nIdentified {postgres_duplicate_instances_found} duplicate instances to delete.")
+    print(f"Total unique PostgreSQL IDs marked for deletion: {len(ids_to_delete)}")
+
+    # 4. Delete Duplicates from PostgreSQL (No Confirmation Prompt)
+    if not ids_to_delete:
+        print("\nNo duplicate entries to delete.")
+    else:
+        if DRY_RUN:
+            print("\n--- DRY RUN MODE ---")
+            print(f"Would delete {len(ids_to_delete)} duplicate entries with the following IDs:")
+            # Print IDs in batches for readability if there are many
+            batch_size = 20
+            for i in range(0, len(ids_to_delete), batch_size):
+                print(f"  {ids_to_delete[i:i+batch_size]}")
+            print("--- END DRY RUN ---")
         else:
-             # Pass the unique IDs of the PG duplicates to the check function
-            chromadb_coincident_duplicate_count = check_chroma_ids_exist(duplicate_pg_ids)
-    elif duplicate_pg_ids:
-         print("\nChromaDB host or collection name not configured. Skipping coincidence check.")
-    # else: pass # No duplicates and no chroma config = nothing to do
+            print("\n--- DELETING DUPLICATES (NO CONFIRMATION) ---")
+            print(f"Proceeding to delete {len(ids_to_delete)} entries from '{PG_TABLE_NAME}'.")
+            try:
+                with pg_conn.cursor() as cur:
+                    # Delete in batches or one by one with delay to reduce load
+                    # Using IN clause is generally more efficient for larger sets
+                    # If cascading is set up correctly, related data will be handled.
+                    delete_query = f"DELETE FROM {PG_TABLE_NAME} WHERE {PG_ID_COLUMN_NAME} = %s;"
+                    for item_id in ids_to_delete:
+                        try:
+                            cur.execute(delete_query, (item_id,))
+                            deleted_in_batch = cur.rowcount # Count affected rows for this ID
+                            total_deleted_count += deleted_in_batch
+                            if deleted_in_batch > 0:
+                                print(f"Deleted ID: {item_id} (Affected rows: {deleted_in_batch})")
+                            else:
+                                print(f"Warning: Delete command for ID {item_id} affected 0 rows (was it already deleted?).", file=sys.stderr)
+
+                            if DELETE_DELAY_SECONDS > 0:
+                                time.sleep(DELETE_DELAY_SECONDS) # Optional delay
+                        except psycopg2.Error as delete_err:
+                            print(f"Error deleting ID {item_id}: {delete_err}. Rolling back this attempt.", file=sys.stderr)
+                            pg_conn.rollback() # Rollback this specific delete attempt
+                    # Only commit if the loop completes without critical errors causing sys.exit
+                    pg_conn.commit()
+                print(f"\nDeletion process finished. Total entries deleted in this run: {total_deleted_count}")
+            except psycopg2.Error as e:
+                print(f"\nCRITICAL: Error during deletion transaction: {e}", file=sys.stderr)
+                print("Attempting to rollback transaction.")
+                try: pg_conn.rollback()
+                except Exception as rb_err: print(f"Rollback failed: {rb_err}", file=sys.stderr)
+                total_deleted_count = 0 # Reset count as commit likely failed
+            except Exception as e:
+                 print(f"\nCRITICAL: Unexpected error during deletion: {e}", file=sys.stderr)
+                 print("Attempting to rollback transaction.")
+                 try: pg_conn.rollback()
+                 except Exception as rb_err: print(f"Rollback failed: {rb_err}", file=sys.stderr)
+                 total_deleted_count = 0
 
     # 5. Report Final Results
     print("\n--- Final Summary ---")
     print(f"Total PostgreSQL items processed: {total_pg_items}")
     successful_hashes = len(hashes_to_pg_ids)
     print(f"Successfully hashed items: {successful_hashes}")
+    unique_images = len(hashes_to_pg_ids)
+    print(f"Unique images found (based on hash): {unique_images}")
+
     if error_summary:
         total_errors = sum(error_summary.values())
-        print(f"Failed or skipped items: {total_errors}")
+        print(f"Failed or skipped items during hashing: {total_errors}")
         for reason, count in error_summary.most_common():
             print(f"  - {reason}: {count}")
 
-    print(f"\nDuplicate instances based on content hash in PostgreSQL: {postgres_duplicate_instances}")
-    if CHROMA_HOST and CHROMA_COLLECTION_NAME:
-        print(f"PostgreSQL duplicate IDs also found in ChromaDB collection '{CHROMA_COLLECTION_NAME}': {chromadb_coincident_duplicate_count}")
+    print(f"\nDuplicate instances identified in PostgreSQL: {postgres_duplicate_instances_found}")
+    if DRY_RUN:
+         print(f"Action: DRY RUN - No entries were deleted.")
+    elif total_deleted_count > 0:
+         print(f"Action: DELETED {total_deleted_count} duplicate entries from PostgreSQL.")
+    elif ids_to_delete: # We intended to delete but counter is 0
+         print(f"Action: Deletion attempted but 0 entries reported deleted (check logs/DB).")
     else:
-        print("(ChromaDB coincidence check skipped)")
-
+        print(f"Action: No duplicates identified to delete.")
 
     # Close PG connection
     if pg_conn:
         pg_conn.close()
         print("\nPostgreSQL connection closed.")
 
-
 if __name__ == "__main__":
     process_duplicates()
+    print("\n--- Script Finished ---")
