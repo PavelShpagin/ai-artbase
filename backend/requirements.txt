@@ -21,3 +21,5 @@ requests
 google-generativeai
 tiktoken
 gunicorn
+imagehash
+pillow
