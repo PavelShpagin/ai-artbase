@@ -153,6 +153,7 @@ const Header = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false); // Keep this for modal logic if needed later
   const searchBarRef = useRef(null);
   const [modalStyle, setModalStyle] = useState({}); // Keep this for modal logic
+  const [uiSearchQuery, setUiSearchQuery] = useState("");
   const navigate = useNavigate();
 
   // Fetch categories logic remains the same
@@ -255,6 +256,7 @@ const Header = () => {
         <RouterLink
           onClick={() => {
             setSearchQuery("");
+            setUiSearchQuery("");
             window.scrollTo(0, 0);
             sessionStorage.setItem("scrollPosition-main-", "0");
             // No need to navigate here if already handled by useEffect
@@ -325,8 +327,17 @@ const Header = () => {
             borderRadius="full"
             fontWeight="500"
             color={useColorModeValue("gray.700", "gray.200")}
-            value={searchQuery ?? ""} // Ensure value is never undefined/null for controlled input
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={uiSearchQuery ?? ""} // Ensure value is never undefined/null for controlled input
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                // Handle search submission on Enter key press
+                e.preventDefault();
+                // The search query is already being set via onChange
+                // Any additional search submission logic would go here
+                setSearchQuery(e.target.value);
+              }
+            }}
+            onChange={(e) => setUiSearchQuery(e.target.value)}
             pl={10} // Ensure text doesn't overlap icon
             pr={4} // Standard padding right
           />

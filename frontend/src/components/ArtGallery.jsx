@@ -640,68 +640,68 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   };
 
   // --- Add placeholder data generation ---
-  const placeholderArts = useMemo(() => {
-    const ratios = [
-      { width: 1, height: 1 },
-      { width: 4, height: 3 },
-      { width: 3, height: 4 },
-      { width: 16, height: 9 },
-      { width: 9, height: 16 },
-      { width: 3, height: 4 },
-      { width: 4, height: 3 },
-      { width: 1, height: 1 },
-      { width: 16, height: 9 },
-      { width: 9, height: 16 },
-      { width: 3, height: 4 },
-      { width: 4, height: 3 },
-      { width: 1, height: 1 },
-      { width: 1, height: 1 },
-      { width: 4, height: 3 },
-      { width: 3, height: 4 },
-      { width: 16, height: 9 },
-      { width: 9, height: 16 },
-      { width: 3, height: 4 },
-      { width: 4, height: 3 },
-      { width: 1, height: 1 },
-      { width: 16, height: 9 },
-      { width: 9, height: 16 },
-      { width: 3, height: 4 },
-      { width: 4, height: 3 },
-      { width: 1, height: 1 },
-      { width: 1, height: 1 },
-      { width: 4, height: 3 },
-      { width: 3, height: 4 },
-      { width: 16, height: 9 },
-      { width: 9, height: 16 },
-      { width: 3, height: 4 },
-      { width: 4, height: 3 },
-      { width: 1, height: 1 },
-      { width: 16, height: 9 },
-      { width: 9, height: 16 },
-      { width: 3, height: 4 },
-      { width: 4, height: 3 },
-      { width: 1, height: 1 },
-    ];
-    return Array.from({ length: ITEMS_PER_PAGE }, (_, i) => ({
-      id: `placeholder-${i}`,
-      src: `placeholder-${i}.jpg`, // react-photo-gallery needs a unique src
-      ...ratios[i % ratios.length], // Cycle through different aspect ratios
-      alt: "Loading placeholder",
-    }));
-  }, [ITEMS_PER_PAGE]); // Only depends on ITEMS_PER_PAGE
+  // const placeholderArts = useMemo(() => {
+  //   const ratios = [
+  //     { width: 1, height: 1 },
+  //     { width: 4, height: 3 },
+  //     { width: 3, height: 4 },
+  //     { width: 16, height: 9 },
+  //     { width: 9, height: 16 },
+  //     { width: 3, height: 4 },
+  //     { width: 4, height: 3 },
+  //     { width: 1, height: 1 },
+  //     { width: 16, height: 9 },
+  //     { width: 9, height: 16 },
+  //     { width: 3, height: 4 },
+  //     { width: 4, height: 3 },
+  //     { width: 1, height: 1 },
+  //     { width: 1, height: 1 },
+  //     { width: 4, height: 3 },
+  //     { width: 3, height: 4 },
+  //     { width: 16, height: 9 },
+  //     { width: 9, height: 16 },
+  //     { width: 3, height: 4 },
+  //     { width: 4, height: 3 },
+  //     { width: 1, height: 1 },
+  //     { width: 16, height: 9 },
+  //     { width: 9, height: 16 },
+  //     { width: 3, height: 4 },
+  //     { width: 4, height: 3 },
+  //     { width: 1, height: 1 },
+  //     { width: 1, height: 1 },
+  //     { width: 4, height: 3 },
+  //     { width: 3, height: 4 },
+  //     { width: 16, height: 9 },
+  //     { width: 9, height: 16 },
+  //     { width: 3, height: 4 },
+  //     { width: 4, height: 3 },
+  //     { width: 1, height: 1 },
+  //     { width: 16, height: 9 },
+  //     { width: 9, height: 16 },
+  //     { width: 3, height: 4 },
+  //     { width: 4, height: 3 },
+  //     { width: 1, height: 1 },
+  //   ];
+  //   return Array.from({ length: ITEMS_PER_PAGE }, (_, i) => ({
+  //     id: `placeholder-${i}`,
+  //     src: `placeholder-${i}.jpg`, // react-photo-gallery needs a unique src
+  //     ...ratios[i % ratios.length], // Cycle through different aspect ratios
+  //     alt: "Loading placeholder",
+  //   }));
+  // }, [ITEMS_PER_PAGE]); // Only depends on ITEMS_PER_PAGE
 
   // Custom renderer for placeholder items
-  const placeholderRenderer = ({ index, left, top, key, photo }) => {
-    return (
-      <PlaceholderItem
-        key={`${key}-${index}`}
-        left={left}
-        top={top}
-        width={photo.width}
-        height={photo.height}
-      />
-    );
-  };
+  // const placeholderRenderer = ({ index, left, top, key, photo }) => {
+  //   return (
+  //     <PlaceholderItem
+  //       key={`${key}-${index}`}
+  //       left={left}
+  //       top={top}
+  //       width={photo.width}
+  //       height={photo.height}
+  //     />
+  //   );
+  // };
   // --- End placeholder logic ---
 
   useEffect(() => {
@@ -710,16 +710,16 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
   // --- DOM Check Logic ---
   // Note: Directly querying DOM in render can be fragile. Consider useEffect for robustness.
-  let shouldShowSpinnerBasedOnDOM = false;
-  if (typeof window !== "undefined") {
-    // Ensure this only runs client-side
-    const galleryElement = document.querySelector(
-      ".react-photo-gallery--gallery"
-    );
-    if (galleryElement && galleryElement.children.length > 5) {
-      shouldShowSpinnerBasedOnDOM = true;
-    }
-  }
+  // let shouldShowSpinnerBasedOnDOM = false;
+  // if (typeof window !== "undefined") {
+  //   // Ensure this only runs client-side
+  //   const galleryElement = document.querySelector(
+  //     ".react-photo-gallery--gallery"
+  //   );
+  //   if (galleryElement && galleryElement.children.length > 5) {
+  //     shouldShowSpinnerBasedOnDOM = true;
+  //   }
+  // }
 
   return (
     <>
