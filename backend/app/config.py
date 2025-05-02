@@ -18,6 +18,9 @@ CHROMA_DB_PATH = os.environ.get('CHROMA_DB_PATH')
 # OpenAI configuration
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 
+# Gemini configuration
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+
 # Cloudflare R2 Configuration
 R2_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID')
 R2_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY')

@@ -10,11 +10,41 @@ import hashlib
 from ..chroma_services import *
 from ..config import *
 from ..utils import *
-from ..r2_storage import upload_image_to_r2
+from ..r2_storage import upload_image_to_r2, upload_image_bytes_to_r2
 from ..chroma_services import collection_prompts
 import numpy as np
 import time
 from app.scripts.enhance_prompts import generate_description
+from google import generativeai as genai
+from google.generativeai import types as genai_types
+
+# Initialize Gemini client
+client = None # Define client initially as None
+if GEMINI_API_KEY:
+    # Assuming configure might still be needed, or Client takes api_key directly
+    # If Client takes key directly, genai.configure might not be needed here.
+    # Let's try initializing Client directly first as per user example structure.
+    try:
+        # Reverted to direct initialization based on original user snippet structure
+        # Assuming 'from google import generativeai as genai' makes genai.Client valid
+        client = genai.Client(api_key=GEMINI_API_KEY) 
+    except AttributeError as ae:
+        # If Client is still not found, print specific error
+        print(f"Error: genai.Client not found with current import. Trying configure/GenerativeModel approach. Error: {ae}")
+        # Fallback attempt: Maybe configuration needs to happen first?
+        try:
+            genai.configure(api_key=GEMINI_API_KEY)
+            # Re-attempt initialization after configure?
+            # client = genai.Client() # Or maybe configure is enough? Need to test.
+            print("INFO: genai.configure called. Client initialization might depend on this.")
+            # If configure works but Client doesn't, we might need a different call pattern.
+        except Exception as configure_e:
+             print(f"Error during genai.configure: {configure_e}")
+    except Exception as e:
+        print(f"Error initializing Gemini Client: {e}")
+
+else:
+    print("Warning: GEMINI_API_KEY not found in config. Image generation will not be available.")
 
 router = APIRouter()
 
@@ -448,4 +478,52 @@ async def get_batch_arts(
     ]
     
     return arts_with_likes
+
+@router.post("/generate/image/", response_model=schemas.ImageGenerationResponse)
+async def generate_image_from_prompt(request: schemas.ImageGenerationRequest):
+    if not client: # Check if client was initialized successfully
+        raise HTTPException(status_code=503, detail="Image generation service client is not available.")
+
+    try:
+        print(f"Generating image with prompt: {request.prompt}, count: {request.number_of_images}")
+        # API call using the client instance
+        response = client.models.generate_images(
+            model='imagen-3.0-generate-002',
+            prompt=request.prompt,
+            number_of_images=request.number_of_images,
+        )
+    except AttributeError as ae:
+        # Specific error if client object doesn't have 'models'
+        print(f"AttributeError during API call: client object might be wrong type or models attribute missing. Error: {ae}")
+        raise HTTPException(status_code=500, detail=f"API structure error: {ae}")
+    except Exception as e:
+        print(f"Error calling Gemini Imagen API: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate image: {str(e)}")
+
+    image_urls = []
+    for i, generated_image in enumerate(response.generated_images):
+        try:
+            image_bytes = generated_image.image.image_bytes
+            if not image_bytes:
+                print(f"Warning: Generated image {i} has no image bytes.")
+                continue
+
+            prompt_hash = hashlib.md5(request.prompt.encode()).hexdigest()
+            unique_filename = f"generated_{prompt_hash}_{i}.png"
+            
+            image_url = await upload_image_bytes_to_r2(image_bytes, unique_filename, content_type='image/png')
+            image_urls.append(image_url)
+            print(f"Uploaded generated image to: {image_url}")
+
+        except AttributeError as ae:
+            print(f"Warning: Generated image {i} structure unexpected or missing data: {ae}")
+            continue 
+        except Exception as e:
+            print(f"Failed to process or upload generated image {i} to R2: {str(e)}")
+            continue
+
+    if not image_urls:
+        raise HTTPException(status_code=500, detail="Image generation succeeded but failed to process or upload any images.")
+
+    return schemas.ImageGenerationResponse(image_urls=image_urls)
     

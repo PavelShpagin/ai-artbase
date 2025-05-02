@@ -1,41 +1,52 @@
 import boto3
+from botocore.client import Config
 from fastapi import UploadFile
 from .config import R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT_URL, R2_BUCKET_NAME, R2_PUBLIC_URL
+import io
 
-def get_r2_client():
-    """Create and return a boto3 S3 client configured for Cloudflare R2"""
-    return boto3.client(
-        's3',
-        aws_access_key_id=R2_ACCESS_KEY_ID,
-        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-        endpoint_url=R2_ENDPOINT_URL
-    )
+# Initialize S3 client for R2
+s3 = boto3.client(
+    service_name='s3',
+    endpoint_url=R2_ENDPOINT_URL,
+    aws_access_key_id=R2_ACCESS_KEY_ID,
+    aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+    config=Config(signature_version='s3v4')
+)
 
-async def upload_image_to_r2(file: UploadFile, filename: str):
-    """Upload an image to Cloudflare R2 storage
-    
-    Args:
-        file: The uploaded file
-        filename: The filename to use in R2 storage
-        
-    Returns:
-        str: The URL to access the uploaded file
-    """
-    client = get_r2_client()
-    file.file.seek(0)  # Reset file pointer to beginning
-    
+async def upload_image_to_r2(image: UploadFile, filename: str) -> str:
     try:
-        client.upload_fileobj(
-            file.file, 
-            R2_BUCKET_NAME, 
+        # Use upload_fileobj for UploadFile which provides a file-like object
+        s3.upload_fileobj(
+            image.file, 
+            R2_BUCKET_NAME,
             filename,
-            ExtraArgs={"ContentType": file.content_type}
+            ExtraArgs={
+                'ContentType': image.content_type
+            }
         )
-        return f"{R2_PUBLIC_URL}/{filename}"
+        image_url = f"{R2_PUBLIC_URL}/{filename}"
+        return image_url
     except Exception as e:
-        # Reset file pointer for potential retry
-        file.file.seek(0)
-        raise e
+        print(f"Error uploading {filename} to R2: {str(e)}")
+        raise
+
+async def upload_image_bytes_to_r2(image_bytes: bytes, filename: str, content_type: str = 'image/png') -> str:
+    """Uploads raw image bytes to R2."""
+    try:
+        # Use upload_fileobj with BytesIO for raw bytes
+        s3.upload_fileobj(
+            io.BytesIO(image_bytes),
+            R2_BUCKET_NAME,
+            filename,
+            ExtraArgs={
+                'ContentType': content_type
+            }
+        )
+        image_url = f"{R2_PUBLIC_URL}/{filename}"
+        return image_url
+    except Exception as e:
+        print(f"Error uploading bytes to R2 as {filename}: {str(e)}")
+        raise
 
 def get_image_from_r2(filename: str):
     """Get an image URL from R2
@@ -54,5 +65,4 @@ def delete_image_from_r2(filename: str):
     Args:
         filename: The filename in R2 storage
     """
-    client = get_r2_client()
-    client.delete_object(Bucket=R2_BUCKET_NAME, Key=filename) 
+    s3.delete_object(Bucket=R2_BUCKET_NAME, Key=filename) 

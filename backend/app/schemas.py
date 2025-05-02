@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, List, Union, Dict, Any
 from datetime import datetime
 
 #User
@@ -23,21 +23,21 @@ class User(UserCreate):
 
 # Art
 class ArtBase(BaseModel):
+    width: int
+    height: int
     prompt: str
     descriptive_prompt: Optional[str] = None
+    src: str
+    owner_id: int
+    num_likes: int = 0
 
 class ArtCreate(ArtBase):
     pass
 
 class Art(ArtBase):
     id: int
-    src: str
     date: datetime
-    width: int
-    height: int
     premium: bool = False
-    owner_id: int
-    num_likes: int = 0
     liked_by_user: bool = False
 
     class Config:
@@ -119,3 +119,14 @@ class ProcessedLinkResponse(BaseModel):
     
     class Config:
         orm_mode = True
+
+class ImageGenerationRequest(BaseModel):
+    prompt: str = Field(..., description="The text prompt to generate the image from.")
+    number_of_images: int = Field(1, ge=1, le=4, description="Number of images to generate.")
+
+class ImageGenerationResponse(BaseModel):
+    image_urls: List[str] = Field(..., description="List of URLs for the generated images.")
+
+class Category(BaseModel):
+    id: int
+    name: str

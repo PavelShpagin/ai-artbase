@@ -10,9 +10,9 @@ python-dotenv
 pillow>=10.0.0
 psycopg2-binary
 openai
-transformers
-torch
-torchvision
+# transformers
+# torch
+# torchvision
 alembic
 boto3>=1.28.0
 botocore>=1.31.0

@@ -41,3 +41,6 @@ scraper/node_modules
 backend/chroma_data/*
 chroma_data/*
 _backup/*
+
+backend/venv/*
+backend/venv

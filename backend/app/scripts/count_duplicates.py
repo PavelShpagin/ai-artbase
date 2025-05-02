@@ -10,7 +10,7 @@ from PIL import Image
 import imagehash
 from io import BytesIO
 import numpy as np # <-- Add numpy import
-from sklearn.cluster import DBSCAN # <-- Add DBSCAN import
+from sklearn.cluster import BIRCH # <-- Import BIRCH
 
 # --- Configuration from Environment Variables ---
 # PostgreSQL
@@ -162,71 +162,75 @@ def process_duplicates():
                 error_summary["future_exception"] += 1
     print(f"\nFinished perceptual hashing {processed_count} PostgreSQL items.")
 
-    # --- Clustering with DBSCAN ---
-    print(f"\n--- Clustering {len(phashes_and_ids)} images using DBSCAN (eps={PHASH_DISTANCE_THRESHOLD}, metric=hamming) ---")
+    # --- Clustering with BIRCH ---
+    # Note: BIRCH uses Euclidean distance. We use boolean arrays (0/1) derived from phash.
+    # The squared Euclidean distance between these is equal to the Hamming distance.
+    # So, BIRCH threshold should be approx. sqrt(desired Hamming threshold).
+    birch_threshold = np.sqrt(PHASH_DISTANCE_THRESHOLD)
+    print(f"\n--- Clustering {len(phashes_and_ids)} images using BIRCH (threshold={birch_threshold:.4f}, derived from Hamming threshold {PHASH_DISTANCE_THRESHOLD}) ---")
 
     if not phashes_and_ids:
         print("No valid hashes generated, skipping clustering and deletion.")
         ids_to_delete = []
     else:
-        # Prepare data for DBSCAN
-        # Extract hashes into a list
+        # Prepare data for BIRCH
         hashes_list = [p_id[0] for p_id in phashes_and_ids]
-        # Extract corresponding IDs
         ids_list = [p_id[1] for p_id in phashes_and_ids]
-        # Convert ImageHash objects to NumPy boolean arrays suitable for hamming distance
-        hash_arrays = np.array([h.hash.flatten() for h in hashes_list])
+        # Convert ImageHash objects to NumPy float arrays (0.0/1.0) for BIRCH
+        hash_arrays = np.array([h.hash.flatten().astype(float) for h in hashes_list])
 
-        # Apply DBSCAN
-        # min_samples=2 means a cluster must have at least 2 points (a duplicate)
-        # Points not part of any cluster will be labeled -1 (noise) and are considered unique
-        print("Running DBSCAN clustering...")
-        db = DBSCAN(eps=PHASH_DISTANCE_THRESHOLD, min_samples=2, metric='hamming').fit(hash_arrays)
-        labels = db.labels_
-        print(f"DBSCAN finished. Found {len(set(labels)) - (1 if -1 in labels else 0)} duplicate clusters.")
+        # Apply BIRCH
+        # n_clusters=None: Performs leaf-node clustering. Each leaf CF node acts as a cluster.
+        print("Running BIRCH clustering...")
+        # Increase default threshold slightly if PHASH_DISTANCE_THRESHOLD is very low
+        # This prevents potentially creating too many tiny clusters for near-identical images
+        # A threshold < 1 means only *identical* hashes would cluster. Let's ensure it's at least 1.
+        adjusted_threshold = max(1.0, birch_threshold)
+        if adjusted_threshold != birch_threshold:
+            print(f"Adjusted BIRCH threshold to {adjusted_threshold:.4f} to allow non-identical matches.")
+
+        # We can provide precomputed distances if needed, but let's try direct input first.
+        # If memory becomes an issue with hash_arrays, consider processing in batches or exploring BIRCH options further.
+        model = BIRCH(threshold=adjusted_threshold, n_clusters=None, branching_factor=50) # Keep branching_factor default for now
+        model.fit(hash_arrays)
+        labels = model.labels_ # Get cluster labels for each point
+        unique_labels = set(labels)
+        print(f"BIRCH finished. Found {len(unique_labels)} potential duplicate clusters (CF tree leaf nodes).")
 
         # Group IDs by cluster label
         clusters = defaultdict(list)
         for i, label in enumerate(labels):
-            # Only group items that are part of a cluster (label != -1)
-            if label != -1:
-                clusters[label].append(ids_list[i]) # Group original IDs by cluster label
+            clusters[label].append(ids_list[i]) # Group original IDs by cluster label
 
         ids_to_delete = []
         can_check_metadata = bool(PG_METADATA_TABLE_NAME and PG_METADATA_FK_COLUMN_NAME)
+        processed_clusters_count = 0
 
-        # Process each cluster to decide which ID to keep
-        print(f"Processing {len(clusters)} duplicate clusters to determine items for deletion...")
+        # Process each cluster (leaf node) to decide which ID to keep
+        print(f"Processing {len(clusters)} potential duplicate clusters to determine items for deletion...")
         for label, current_group_ids in clusters.items():
-            if len(current_group_ids) > 1: # Should always be true based on min_samples=2
+            # Only consider groups with more than 1 item as duplicates
+            if len(current_group_ids) > 1:
+                processed_clusters_count += 1
                 keep_id = None
                 # --- Keep ID selection logic (same as before) ---
                 if can_check_metadata:
                     ids_with_meta = get_ids_with_metadata(pg_conn, current_group_ids)
                     if len(ids_with_meta) == 1:
                         keep_id = list(ids_with_meta)[0]
-                        # Optional: print(f"  Cluster {label}: Keeping ID {keep_id} (has metadata).")
                     elif len(ids_with_meta) > 1:
-                        # Keep the one with the 'lowest' corresponding phash (or just first encountered ID)
-                        # To keep the logic simple and consistent, let's find the original index
-                        # of these IDs and choose the one that appeared earliest in the phashes_and_ids list
-                        # (which indirectly corresponds to the hash, though maybe not perfectly lowest hash value)
-                        # Or, more simply, just pick the smallest ID among those with metadata.
                         potential_keeps_meta = [id_ for id_ in current_group_ids if id_ in ids_with_meta]
-                        keep_id = min(potential_keeps_meta) # Keep the smallest ID among those with metadata
-                        # Optional: print(f"  Warning: Cluster {label}: Multiple have metadata: {ids_with_meta}. Keeping smallest ID: {keep_id}.")
+                        keep_id = min(potential_keeps_meta)
 
                 if keep_id is None:
-                    # Keep the smallest ID if no metadata preference or no metadata check possible
                     keep_id = min(current_group_ids)
-                    # Optional: if can_check_metadata: print(f"  Cluster {label}: None have metadata. Keeping smallest ID: {keep_id}.")
-                    # Optional: else: print(f"  Cluster {label}: Keeping smallest ID: {keep_id}.")
-
 
                 # Add others to delete list
                 delete_ids_in_cluster = [id_ for id_ in current_group_ids if id_ != keep_id]
                 ids_to_delete.extend(delete_ids_in_cluster)
                 # Optional: print(f"  Cluster {label} (size {len(current_group_ids)}): Keeping {keep_id}, marked {len(delete_ids_in_cluster)} for deletion.")
+
+        print(f"Finished processing {processed_clusters_count} clusters containing actual duplicates.")
 
     # --- Deletion Logic (Remains the same) ---
     print(f"\nTotal unique PostgreSQL IDs marked for deletion: {len(ids_to_delete)}")
