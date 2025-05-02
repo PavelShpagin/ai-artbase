@@ -11,6 +11,13 @@ import imagehash
 from io import BytesIO
 import numpy as np # <-- Add numpy import
 from sklearn.cluster import MiniBatchKMeans
+from dotenv import load_dotenv
+
+# --- LSH related imports ---
+from datasketch import MinHash, MinHashLSH
+
+# Load environment variables from .env file
+load_dotenv()
 
 # --- Configuration from Environment Variables ---
 # PostgreSQL
@@ -31,6 +38,11 @@ MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
 DELETE_DELAY_SECONDS = float(os.getenv("DELETE_DELAY_SECONDS", 0.1)) # Optional delay
 DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
 PHASH_DISTANCE_THRESHOLD = int(os.getenv("PHASH_DISTANCE_THRESHOLD", 5))
+
+# --- LSH Specific Configuration ---
+LSH_NUM_PERM = 128            # Number of permutations for MinHash (higher=more accurate but slower)
+LSH_JACCARD_THRESHOLD = 0.8   # Jaccard similarity threshold for LSH candidates (0.0-1.0)
+                              # Higher threshold = stricter candidate selection
 
 # --- Helper Functions ---
 
@@ -109,11 +121,27 @@ def get_ids_with_metadata(conn, id_list):
         print(f"Warning: Error checking metadata for IDs {id_list}: {e}", file=sys.stderr)
     return ids_with_metadata
 
+# --- LSH Helper Function ---
+def create_minhash(phash_obj, num_perm):
+    """Creates a MinHash object from an imagehash phash object."""
+    if phash_obj is None or phash_obj.hash is None:
+        return None
+    # Convert the boolean hash array into a set of features (indices of True bits).
+    true_indices = np.where(phash_obj.hash.flatten())[0]
+    feature_set = {str(i) for i in true_indices} # Use string representation
+
+    m = MinHash(num_perm=num_perm)
+    if not feature_set: # Handle case of all-False hash if it occurs
+        return m
+    for feature in feature_set:
+        m.update(feature.encode('utf8'))
+    return m
+
 # --- Main Execution ---
 def process_duplicates():
     pg_conn = None
     processed_count = 0
-    phashes_and_ids = []  # List of (phash, id)
+    phashes_and_ids = {}  # Dictionary: {id: phash_object}
     error_summary = Counter()
     total_pg_items = 0
     total_deleted_count = 0
@@ -146,13 +174,13 @@ def process_duplicates():
             original_id = future_to_id[future]
             processed_count += 1
             try:
-                returned_id, phash, status = future.result()
+                returned_id, phash_obj, status = future.result()
                 if original_id != returned_id:
                     print(f"CRITICAL internal error: ID mismatch for future {original_id} != {returned_id}", file=sys.stderr)
                     error_summary["internal_id_mismatch"] += 1
                     continue
-                if phash and status == "success":
-                    phashes_and_ids.append((phash, original_id))
+                if phash_obj and status == "success":
+                    phashes_and_ids[original_id] = phash_obj # Store as ID -> pHash object
                 elif status != "success":
                     error_summary[status] += 1
                 if processed_count % 100 == 0 or processed_count == total_pg_items:
@@ -161,111 +189,145 @@ def process_duplicates():
                 print(f"Item ID {original_id} generated an exception during future processing: {exc}", file=sys.stderr)
                 error_summary["future_exception"] += 1
     print(f"\nFinished perceptual hashing {processed_count} PostgreSQL items.")
+    print(f"Successfully generated {len(phashes_and_ids)} phashes.")
 
-    # --- Clustering with MiniBatchKMeans ---
-    # Note: MiniBatchKMeans uses Euclidean distance. We use boolean arrays (0/1) derived from phash.
-    # The squared Euclidean distance between these is equal to the Hamming distance.
-    # So, MiniBatchKMeans threshold should be approx. sqrt(desired Hamming threshold).
-    mbk_threshold = np.sqrt(PHASH_DISTANCE_THRESHOLD)
-    print(f"\n--- Clustering {len(phashes_and_ids)} images using MiniBatchKMeans (threshold={mbk_threshold:.4f}, derived from Hamming threshold {PHASH_DISTANCE_THRESHOLD}) ---")
+    # --- LSH Indexing and Querying ---
+    print(f"\n--- Building MinHashLSH Index (Num Perm: {LSH_NUM_PERM}, Jaccard Threshold: {LSH_JACCARD_THRESHOLD}) ---")
 
     if not phashes_and_ids:
-        print("No valid hashes generated, skipping clustering and deletion.")
-        ids_to_delete = []
+        print("No valid hashes generated, skipping LSH and deletion.")
+        ids_to_delete = set() # Use set for efficient addition
     else:
-        # Prepare data for MiniBatchKMeans
-        hashes_list = [p_id[0] for p_id in phashes_and_ids]
-        ids_list = [p_id[1] for p_id in phashes_and_ids]
-        # Convert ImageHash objects to NumPy float arrays (0.0/1.0) for MiniBatchKMeans
-        hash_arrays = np.array([h.hash.flatten().astype(float) for h in hashes_list])
+        # 1. Create LSH index
+        lsh = MinHashLSH(threshold=LSH_JACCARD_THRESHOLD, num_perm=LSH_NUM_PERM)
+        minhashes = {} # Store minhashes: {id: minhash_object}
 
-        # Apply MiniBatchKMeans
-        # n_clusters is the desired number of clusters
-        # batch_size controls how many samples are used in each iteration
-        print("Running MiniBatchKMeans clustering...")
-        mbk = MiniBatchKMeans(n_clusters=8, batch_size=1000, random_state=0)
-        mbk.fit(hash_arrays)
-        labels = mbk.labels_ # Get cluster labels for each point
-        cluster_centers = mbk.cluster_centers_
-        unique_labels = set(labels)
-        print(f"MiniBatchKMeans finished. Found {len(unique_labels)} potential duplicate clusters (CF tree leaf nodes).")
+        # 2. Create MinHash objects and insert into LSH index
+        print("Generating MinHashes and populating LSH index...")
+        insertion_count = 0
+        for item_id, phash_obj in phashes_and_ids.items():
+            minhash_obj = create_minhash(phash_obj, LSH_NUM_PERM)
+            if minhash_obj:
+                minhashes[item_id] = minhash_obj
+                # Use item_id (which should be unique) as the key for LSH insertion
+                lsh.insert(item_id, minhash_obj)
+                insertion_count += 1
+        print(f"Inserted {insertion_count} items into LSH index.")
 
-        # Group IDs by cluster label
-        clusters = defaultdict(list)
-        for i, label in enumerate(labels):
-            clusters[label].append(ids_list[i]) # Group original IDs by cluster label
+        # 3. Find duplicate groups using LSH and refine with Hamming distance
+        print("Querying LSH and refining with Hamming distance to find duplicates...")
+        ids_to_delete = set()
+        processed_ids = set() # Keep track of IDs already part of a processed duplicate group
+        potential_duplicate_groups = 0
 
-        ids_to_delete = []
-        can_check_metadata = bool(PG_METADATA_TABLE_NAME and PG_METADATA_FK_COLUMN_NAME)
-        processed_clusters_count = 0
+        all_hashed_ids = list(minhashes.keys()) # IDs that have a valid MinHash
 
-        # Process each cluster (leaf node) to decide which ID to keep
-        print(f"Processing {len(clusters)} potential duplicate clusters to determine items for deletion...")
-        for label, current_group_ids in clusters.items():
-            # Only consider groups with more than 1 item as duplicates
-            if len(current_group_ids) > 1:
-                processed_clusters_count += 1
+        for current_id in all_hashed_ids:
+            if current_id in processed_ids:
+                continue # Skip if already handled in another group
+
+            current_minhash = minhashes[current_id]
+            # Query LSH for potential matches for the current item's MinHash
+            # The result contains the keys (item_ids) of potential matches
+            candidate_ids = lsh.query(current_minhash)
+
+            # Refine candidates using exact Hamming distance
+            current_duplicate_group = {current_id} # Start group with the current item
+            if candidate_ids: # Check if LSH returned any candidates
+                 current_phash = phashes_and_ids[current_id]
+                 for candidate_id in candidate_ids:
+                     # Don't compare with self, ensure candidate has phash, and hasn't been processed
+                     if candidate_id != current_id and candidate_id in phashes_and_ids and candidate_id not in processed_ids:
+                         candidate_phash = phashes_and_ids[candidate_id]
+                         # Calculate exact Hamming distance
+                         hamming_dist = current_phash - candidate_phash
+                         if hamming_dist <= PHASH_DISTANCE_THRESHOLD:
+                             current_duplicate_group.add(candidate_id) # Add to the group if similar enough
+
+            # Process the identified duplicate group
+            if len(current_duplicate_group) > 1:
+                potential_duplicate_groups += 1
                 keep_id = None
+                group_list = list(current_duplicate_group) # Convert set to list for metadata check
+
                 # --- Keep ID selection logic (same as before) ---
+                can_check_metadata = bool(PG_METADATA_TABLE_NAME and PG_METADATA_FK_COLUMN_NAME)
                 if can_check_metadata:
-                    ids_with_meta = get_ids_with_metadata(pg_conn, current_group_ids)
-                    if len(ids_with_meta) == 1:
-                        keep_id = list(ids_with_meta)[0]
-                    elif len(ids_with_meta) > 1:
-                        potential_keeps_meta = [id_ for id_ in current_group_ids if id_ in ids_with_meta]
+                    ids_with_meta = get_ids_with_metadata(pg_conn, group_list)
+                    potential_keeps_meta = [id_ for id_ in group_list if id_ in ids_with_meta]
+
+                    if len(potential_keeps_meta) == 1:
+                        keep_id = potential_keeps_meta[0]
+                    elif len(potential_keeps_meta) > 1:
+                        # If multiple have metadata, keep the one with the lowest ID among them
                         keep_id = min(potential_keeps_meta)
+                    # If len == 0, fall through to min ID logic
 
+                # If no metadata preference, keep the item with the numerically smallest ID
                 if keep_id is None:
-                    keep_id = min(current_group_ids)
+                    keep_id = min(group_list)
 
-                # Add others to delete list
-                delete_ids_in_cluster = [id_ for id_ in current_group_ids if id_ != keep_id]
-                ids_to_delete.extend(delete_ids_in_cluster)
-                # Optional: print(f"  Cluster {label} (size {len(current_group_ids)}): Keeping {keep_id}, marked {len(delete_ids_in_cluster)} for deletion.")
+                # Add others from the group to the delete set
+                for item_id in current_duplicate_group:
+                    if item_id != keep_id:
+                        ids_to_delete.add(item_id)
+                # Optional: print(f"  Duplicate Group (size {len(current_duplicate_group)}): {group_list} -> Keeping {keep_id}")
 
-        print(f"Finished processing {processed_clusters_count} clusters containing actual duplicates.")
+            # Mark all members of this group (even if size=1) as processed
+            processed_ids.update(current_duplicate_group)
 
-    # --- Deletion Logic (Remains the same) ---
-    print(f"\nTotal unique PostgreSQL IDs marked for deletion: {len(ids_to_delete)}")
+        print(f"Finished LSH querying. Identified {potential_duplicate_groups} groups with potential duplicates.")
 
-    # 4. Delete Duplicates from PostgreSQL (No Confirmation Prompt)
-    if not ids_to_delete:
+    # Convert set to list for deletion logic compatibility (and sorting)
+    ids_to_delete_list = sorted(list(ids_to_delete))
+
+    # --- Deletion Logic ---
+    print(f"\nTotal unique PostgreSQL IDs marked for deletion: {len(ids_to_delete_list)}")
+
+    # Delete Duplicates from PostgreSQL
+    if not ids_to_delete_list:
         print("\nNo duplicate entries to delete.")
     else:
         if DRY_RUN:
             print("\n--- DRY RUN MODE ---")
-            print(f"Would delete {len(ids_to_delete)} duplicate entries with the following IDs:")
+            print(f"Would delete {len(ids_to_delete_list)} duplicate entries with the following IDs:")
             batch_size = 20
-            # Sort for clearer output (optional)
-            ids_to_delete.sort()
-            for i in range(0, len(ids_to_delete), batch_size):
-                print(f"  {ids_to_delete[i:i+batch_size]}")
+            for i in range(0, len(ids_to_delete_list), batch_size):
+                print(f"  {ids_to_delete_list[i:i+batch_size]}")
             print("--- END DRY RUN ---")
         else:
-            print("\n--- DELETING DUPLICATES (NO CONFIRMATION) ---")
-            print(f"Proceeding to delete {len(ids_to_delete)} entries from '{PG_TABLE_NAME}'.")
-            # Sort for potentially better locality if IDs are sequential (optional)
-            ids_to_delete.sort()
+            # --- ACTUAL DELETION ---
+            print(f"\n--- DELETING DUPLICATES (DRY_RUN = {DRY_RUN}) ---")
+            print(f"Proceeding to delete {len(ids_to_delete_list)} entries from '{PG_TABLE_NAME}'.")
             try:
                 with pg_conn.cursor() as cur:
-                    # Consider using DELETE ... WHERE id = ANY(%s) for batching if supported and efficient
-                    # For now, stick to individual deletes with delay
+                    # Use DELETE ... WHERE id = ANY(%s) for better performance if possible
+                    # Requires converting the list to a format psycopg2 understands for ANY
+                    # Example: cur.execute(f"DELETE FROM {PG_TABLE_NAME} WHERE {PG_ID_COLUMN_NAME} = ANY(%s::int[])", (ids_to_delete_list,))
+                    # Using individual deletes for simplicity and delay compatibility for now:
                     delete_query = f"DELETE FROM {PG_TABLE_NAME} WHERE {PG_ID_COLUMN_NAME} = %s;"
-                    for item_id in ids_to_delete:
+                    for item_id in ids_to_delete_list:
                         try:
-                            cur.execute(delete_query, (item_id,))
+                            # Ensure item_id is correct type for query placeholder
+                            cur.execute(delete_query, (int(item_id),))
                             deleted_in_batch = cur.rowcount
-                            total_deleted_count += deleted_in_batch
                             if deleted_in_batch > 0:
+                                total_deleted_count += deleted_in_batch
                                 print(f"Deleted ID: {item_id} (Affected rows: {deleted_in_batch})")
                             else:
-                                print(f"Warning: Delete command for ID {item_id} affected 0 rows (was it already deleted?).", file=sys.stderr)
+                                # This might happen if the ID was already deleted in a previous run or concurrently
+                                print(f"Warning: Delete command for ID {item_id} affected 0 rows.", file=sys.stderr)
                             if DELETE_DELAY_SECONDS > 0:
                                 time.sleep(DELETE_DELAY_SECONDS)
                         except psycopg2.Error as delete_err:
-                            print(f"Error deleting ID {item_id}: {delete_err}. Rolling back this attempt.", file=sys.stderr)
-                            pg_conn.rollback() # Rollback individual delete, maybe continue? Or break? For now, just rollback and continue loop
-                    pg_conn.commit() # Commit successful deletions at the end
+                            print(f"Error deleting ID {item_id}: {delete_err}. Rolling back this item, continuing...", file=sys.stderr)
+                            # Attempt to rollback the single failed statement if possible, might need connection-level rollback
+                            try: pg_conn.rollback() # Rollback the transaction state to before the failed delete
+                            except Exception as rb_err: print(f"Rollback failed: {rb_err}", file=sys.stderr)
+                            # Re-start transaction block if rollback was successful
+                            pg_conn.autocommit = False # Ensure we are back in a transaction if needed
+                    # Commit the entire transaction only if all deletes (or those not rolled back) succeeded
+                    pg_conn.commit()
                 print(f"\nDeletion process finished. Total entries deleted in this run: {total_deleted_count}")
             except psycopg2.Error as e:
                 print(f"\nCRITICAL: Error during deletion transaction: {e}", file=sys.stderr)
@@ -280,27 +342,39 @@ def process_duplicates():
                 except Exception as rb_err: print(f"Rollback failed: {rb_err}", file=sys.stderr)
                 total_deleted_count = 0 # Reset count as transaction failed
 
-    # 5. Report Final Results (Remains the same)
+    # --- Final Report ---
     print("\n--- Final Summary ---")
-    print(f"Total PostgreSQL items processed: {total_pg_items}")
+    print(f"Total PostgreSQL items fetched: {total_pg_items}")
+    print(f"Successfully hashed items: {len(phashes_and_ids)}")
     if error_summary:
         total_errors = sum(error_summary.values())
         print(f"Failed or skipped items during hashing: {total_errors}")
         for reason, count in error_summary.most_common():
             print(f"  - {reason}: {count}")
-    print(f"\nDuplicate instances identified via clustering: {len(ids_to_delete)}")
+    print(f"\nDuplicate instances marked for deletion via LSH + Hamming: {len(ids_to_delete_list)}")
     if DRY_RUN:
-        print(f"Action: DRY RUN - No entries were deleted.")
+        print(f"Action: DRY RUN - No entries were actually deleted.")
     elif total_deleted_count > 0:
         print(f"Action: DELETED {total_deleted_count} duplicate entries from PostgreSQL.")
-    elif ids_to_delete:
-        print(f"Action: Deletion attempted but 0 entries reported deleted (check logs/DB).")
-    else:
-        print(f"Action: No duplicates identified to delete.")
+    elif ids_to_delete_list: # Items were marked, but deletion count is 0
+        print(f"Action: Deletion attempted but {total_deleted_count} entries reported deleted (check logs/DB).")
+    else: # No items marked for deletion
+        print(f"Action: No duplicates identified meeting the threshold.")
+
+    # --- Cleanup ---
     if pg_conn:
         pg_conn.close()
         print("\nPostgreSQL connection closed.")
 
 if __name__ == "__main__":
+    start_time = time.time()
+    # Make sure DRY_RUN is set appropriately above before running!
+    print("Starting duplicate detection process...")
+    print(f"DRY_RUN mode is currently: {'ENABLED' if DRY_RUN else 'DISABLED'}")
+    if not DRY_RUN:
+        print("WARNING: DRY_RUN is DISABLED. The script WILL attempt to delete rows from the database.")
+        # Optional: Add a small delay/prompt here if running interactively
+        # time.sleep(5)
     process_duplicates()
-    print("\n--- Script Finished ---")
+    end_time = time.time()
+    print(f"\nScript finished in {end_time - start_time:.2f} seconds.")

@@ -30,3 +30,4 @@ greenlet
 httpx
 tqdm
 uuid
+datasketch
