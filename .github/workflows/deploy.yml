@@ -76,6 +76,8 @@ jobs:
             R2_PUBLIC_URL=${{ secrets.R2_PUBLIC_URL }}
             API_URL=${{ secrets.API_URL }}
             OWNER_ID=${{ secrets.OWNER_ID }}
+            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            GCP_LOCATION=${{ secrets.GCP_LOCATION }}
             EOF
 
             # Create docker-compose file

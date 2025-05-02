@@ -326,9 +326,8 @@ const Header = () => {
   };
 
   const handleGenerateClick = () => {
-    // Placeholder: Navigate to a generation page or open a modal
-    console.log("Navigate to Generate page");
-    // navigate('/generate'); // Example navigation
+    // Navigate to the generate page
+    navigate("/generate");
   };
 
   // Define gradient colors for easy reuse

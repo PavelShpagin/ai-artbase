@@ -4,7 +4,6 @@ import {
   Flex,
   Heading,
   Textarea,
-  Button,
   Tag,
   Spinner,
   useToast,
@@ -13,24 +12,37 @@ import {
   Wrap,
   WrapItem,
   Icon,
+  useColorModeValue,
 } from "@chakra-ui/react";
 import { FiCpu } from "react-icons/fi";
 import { ArtGallery } from "./ArtGallery"; // Assuming ArtGallery can take an 'arts' prop
 // import fetchAPI from "../services/api"; // Keep commented until API call is implemented
 import { useUser } from "../contexts/UserContext";
 import { useAuthRedirect } from "../hooks/useAuthRedirect"; // Assuming you have this hook
+import PurpleButton from "../components/Buttons"; // Import your custom button
 
 const availableModels = ["Imagen3"]; // Add more models here in the future
 
 const GeneratePage = () => {
-  useAuthRedirect(); // Redirect if not logged in
+  //useAuthRedirect(); // Redirect if not logged in
   const { user } = useUser();
   const [prompt, setPrompt] = useState("");
   const [selectedModels, setSelectedModels] = useState(availableModels); // Select all by default
   const [generatedArts, setGeneratedArts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const toast = useToast();
+  const toast = useToast({
+    position: "top",
+    duration: 5000,
+    isClosable: true,
+  });
   const storageKey = "generated-arts";
+
+  // Color mode values for styling
+  const inputBg = useColorModeValue("gray.100", "gray.700");
+  const inputHoverBg = useColorModeValue("gray.200", "gray.600");
+  const focusBorderColor = useColorModeValue("purple.500", "purple.300");
+  const selectedTagBg = useColorModeValue("purple.100", "purple.700"); // Light purple background
+  const selectedTagColor = useColorModeValue("purple.600", "purple.300"); // Purple text
 
   // Load generated arts from session storage on mount
   useEffect(() => {
@@ -68,8 +80,6 @@ const GeneratePage = () => {
         title: "Prompt is empty",
         description: "Please enter a prompt to generate images.",
         status: "warning",
-        duration: 3000,
-        isClosable: true,
       });
       return;
     }
@@ -78,8 +88,6 @@ const GeneratePage = () => {
         title: "No models selected",
         description: "Please select at least one model.",
         status: "warning",
-        duration: 3000,
-        isClosable: true,
       });
       return;
     }
@@ -143,8 +151,6 @@ const GeneratePage = () => {
       toast({
         title: "Images generated!",
         status: "success",
-        duration: 3000,
-        isClosable: true,
       });
     } catch (error) {
       console.error("Generation failed:", error);
@@ -152,8 +158,6 @@ const GeneratePage = () => {
         title: "Generation failed",
         description: error.message || "Could not generate images.",
         status: "error",
-        duration: 5000,
-        isClosable: true,
       });
     } finally {
       setIsLoading(false);
@@ -190,11 +194,15 @@ const GeneratePage = () => {
               placeholder="Enter your creative prompt here..."
               size="lg"
               minHeight="150px" // Make textarea taller
-              bg="white" // Ensure background contrast
+              bg={inputBg} // Apply background color
+              _hover={{ bg: inputHoverBg }} // Apply hover background color
               _focus={{
-                borderColor: "purple.500",
-                boxShadow: `0 0 0 1px var(--chakra-colors-purple-500)`,
+                // Apply focus styles
+                borderColor: focusBorderColor,
+                boxShadow: `0 0 0 1px ${focusBorderColor}`,
+                bg: inputBg, // Keep background on focus
               }}
+              borderRadius="xl" // Apply rounded corners like SignInModal inputs
             />
           </Box>
 
@@ -204,41 +212,49 @@ const GeneratePage = () => {
               Models:
             </Text>
             <Wrap spacing={2}>
-              {availableModels.map((model) => (
-                <WrapItem key={model}>
-                  <Tag
-                    size="lg"
-                    variant={
-                      selectedModels.includes(model) ? "solid" : "outline"
-                    }
-                    colorScheme={
-                      selectedModels.includes(model) ? "purple" : "gray"
-                    }
-                    onClick={() => handleModelToggle(model)}
-                    cursor="pointer"
-                    borderRadius="full" // Use full border radius
-                    px={4} // Add more horizontal padding
-                    py={1.5} // Add vertical padding
-                  >
-                    {model}
-                  </Tag>
-                </WrapItem>
-              ))}
+              {availableModels.map((model) => {
+                const isSelected = selectedModels.includes(model);
+                return (
+                  <WrapItem key={model}>
+                    <Tag
+                      size="lg"
+                      variant={isSelected ? "solid" : "outline"}
+                      // Use gray scheme for outline, override specific styles for solid
+                      colorScheme={isSelected ? undefined : "gray"}
+                      bg={isSelected ? selectedTagBg : undefined} // Set specific background when selected
+                      color={isSelected ? selectedTagColor : undefined} // Set specific text color when selected
+                      onClick={() => handleModelToggle(model)}
+                      cursor="pointer"
+                      borderRadius="full" // Keep the sleek full border radius
+                      px={4} // Keep horizontal padding
+                      py={1.5} // Keep vertical padding
+                      //borderWidth="1px" // Keep the border
+                      // Set border color to match text color when selected, gray otherwise
+                      borderColor={
+                        isSelected
+                          ? selectedTagColor // Match border to the purple text color
+                          : useColorModeValue("gray.200", "gray.600")
+                      }
+                    >
+                      {model}
+                    </Tag>
+                  </WrapItem>
+                );
+              })}
             </Wrap>
           </Box>
 
-          {/* Generate Button */}
-          <Button
-            colorScheme="purple"
-            size="lg"
+          {/* Generate Button - Use PurpleButton */}
+          <PurpleButton
+            name={isLoading ? "Generating..." : "Generate Images"} // Use name prop for text, adjust based on loading state
             onClick={handleGenerate}
             isLoading={isLoading}
-            loadingText="Generating..."
+            // loadingText prop might not be needed if handled via the name prop
             leftIcon={isLoading ? <Spinner size="sm" /> : undefined}
-            w="full" // Make button full width of its container
-          >
-            Generate Images
-          </Button>
+            size="lg" // Keep size prop
+            w="full" // Keep width prop
+            // colorScheme="purple" prop is likely handled internally by PurpleButton
+          />
         </VStack>
       </Box>
 
