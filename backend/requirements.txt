@@ -23,3 +23,5 @@ tiktoken
 gunicorn
 imagehash
 pillow
+scikit-learn
+numpy

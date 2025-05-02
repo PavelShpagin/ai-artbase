@@ -41,6 +41,8 @@ import {
   ModalHeader,
   ModalBody,
   ModalCloseButton,
+  IconButton,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import {
@@ -50,6 +52,9 @@ import {
   FiUsers,
   FiLogOut,
   FiTrello,
+  FiUpload,
+  FiCpu,
+  FiHome,
 } from "react-icons/fi";
 import { MdHistory } from "react-icons/md";
 import PurpleButton from "./Buttons"; // Make sure path is correct
@@ -144,6 +149,63 @@ const UserMenu = ({ onSignOut }) => {
 };
 // --- UserMenu Component ends ---
 
+// --- BottomNavigation Component Definition ---
+const BottomNavigation = ({ onUploadClick, onGenerateClick }) => {
+  const navigate = useNavigate();
+  const { setSearchQuery, setUiSearchQuery } = useSearchQuery(); // Get search setters
+
+  const handleHomeClick = () => {
+    setSearchQuery(""); // Clear search on home navigation
+    setUiSearchQuery("");
+    window.scrollTo(0, 0);
+    sessionStorage.setItem("scrollPosition-main-", "0");
+    navigate("/");
+  };
+
+  return (
+    <Box
+      position="fixed"
+      bottom={0}
+      left={0}
+      right={0}
+      bg={useColorModeValue("white", "gray.800")}
+      borderTopWidth="1px"
+      borderTopColor={useColorModeValue("gray.200", "gray.700")}
+      p={2}
+      display={{ base: "flex", md: "none" }} // Show only on mobile
+      justifyContent="space-around"
+      alignItems="center"
+      zIndex="sticky" // Ensure it's above content
+    >
+      <IconButton
+        aria-label="Home"
+        icon={<Icon as={FiHome} boxSize={6} />}
+        size="lg"
+        variant="ghost"
+        onClick={handleHomeClick}
+        colorScheme="purple"
+      />
+      <IconButton
+        aria-label="Upload Image"
+        icon={<Icon as={FiUpload} boxSize={6} />}
+        size="lg"
+        variant="ghost"
+        onClick={onUploadClick} // Use passed handler
+        colorScheme="purple"
+      />
+      <IconButton
+        aria-label="Generate Image"
+        icon={<Icon as={FiCpu} boxSize={6} />}
+        size="lg"
+        variant="ghost"
+        onClick={onGenerateClick} // Use passed handler
+        colorScheme="purple"
+      />
+    </Box>
+  );
+};
+// --- BottomNavigation Component Definition Ends ---
+
 const Header = () => {
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const { searchQuery, setSearchQuery, uiSearchQuery, setUiSearchQuery } =
@@ -155,6 +217,7 @@ const Header = () => {
   const searchBarRef = useRef(null);
   const [modalStyle, setModalStyle] = useState({}); // Keep this for modal logic
   const navigate = useNavigate();
+  const isMobile = useBreakpointValue({ base: true, md: false }); // Check if mobile
 
   // Fetch categories logic remains the same
   const { data: categories } = useQuery({
@@ -223,8 +286,16 @@ const Header = () => {
   const handleSignInClick = () => setIsSignInModalOpen(true);
   const handleSignInModalClose = () => setIsSignInModalOpen(false);
 
-  // Removed handleUploadClick as PurpleButton now handles its own onClick
-  // If you need specific logic *before* the click, keep it, otherwise simplify
+  const handleUploadClick = () => {
+    // Trigger the hidden file input
+    document.getElementById("file-upload")?.click();
+  };
+
+  const handleGenerateClick = () => {
+    // Placeholder: Navigate to a generation page or open a modal
+    console.log("Navigate to Generate page");
+    // navigate('/generate'); // Example navigation
+  };
 
   // Define gradient colors for easy reuse
   const gradientStart = "#3ac7cf";
@@ -409,40 +480,25 @@ const Header = () => {
           {/* Conditional Rendering based on token/user */}
           {localStorage.getItem("token") && user ? (
             <>
-              {/* Upload Button */}
-              <Box display={{ base: "none", md: "flex" }}>
-                {/* Point to hidden file input */}
-                <PurpleButton
-                  name="Create"
-                  onClick={() =>
-                    document.getElementById("file-upload")?.click()
-                  }
+              {/* Desktop Upload/Generate Buttons */}
+              <Box display={{ base: "none", md: "flex" }} gap={2}>
+                <IconButton
+                  aria-label="Generate Image"
+                  icon={<Icon as={FiCpu} boxSize={6} />}
+                  size="lg"
+                  variant="ghost"
+                  onClick={handleGenerateClick}
+                  colorScheme="purple"
+                />
+                <IconButton
+                  aria-label="Upload Image"
+                  icon={<Icon as={FiUpload} boxSize={6} />}
+                  size="lg"
+                  variant="ghost"
+                  onClick={handleUploadClick}
+                  colorScheme="purple"
                 />
               </Box>
-              {/* <Box display={{ base: "flex", md: "none" }}>
-                <PurpleButton
-                  name={<MdFileUpload size="1.2em" />} // Use icon with adjusted size
-                  onClick={() =>
-                    document.getElementById("file-upload")?.click()
-                  }
-                  px={3} // Adjust padding for icon button
-                  py={3} // Make it squarer
-                />
-              </Box> */}
-              {/* Hidden File Input */}
-              {/* <Input
-                type="file"
-                id="file-upload"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  // Handle file upload logic here
-                  console.log("File selected:", e.target.files[0]);
-                  // Example: navigate('/upload', { state: { file: e.target.files[0] } });
-                  // Reset input value to allow selecting the same file again
-                  e.target.value = null;
-                }}
-                accept="image/*" // Specify acceptable file types
-              /> */}
               {/* User Menu */}
               <UserMenu
                 user={user}
@@ -477,6 +533,14 @@ const Header = () => {
         isOpen={isSignInModalOpen}
         onClose={handleSignInModalClose}
       />
+
+      {/* Render Bottom Navigation only if logged in on mobile */}
+      {localStorage.getItem("token") && user && isMobile && (
+        <BottomNavigation
+          onUploadClick={handleUploadClick}
+          onGenerateClick={handleGenerateClick}
+        />
+      )}
     </Box>
   );
 };

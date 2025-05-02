@@ -9,6 +9,8 @@ import concurrent.futures
 from PIL import Image
 import imagehash
 from io import BytesIO
+import numpy as np # <-- Add numpy import
+from sklearn.cluster import DBSCAN # <-- Add DBSCAN import
 
 # --- Configuration from Environment Variables ---
 # PostgreSQL
@@ -114,9 +116,7 @@ def process_duplicates():
     phashes_and_ids = []  # List of (phash, id)
     error_summary = Counter()
     total_pg_items = 0
-    ids_to_delete = []
     total_deleted_count = 0
-    kept_ids_info = {}  # phash -> kept_id
 
     pg_connection_params = parse_database_url(DATABASE_URL)
     if not pg_connection_params:
@@ -162,79 +162,73 @@ def process_duplicates():
                 error_summary["future_exception"] += 1
     print(f"\nFinished perceptual hashing {processed_count} PostgreSQL items.")
 
-    # --- Efficient Grouping by Perceptual Hash ---
-    print("\n--- Sorting hashes for efficient grouping ---")
-    phashes_and_ids.sort(key=lambda item: item[0]) # Sort by phash
-    print(f"Sorted {len(phashes_and_ids)} items.")
+    # --- Clustering with DBSCAN ---
+    print(f"\n--- Clustering {len(phashes_and_ids)} images using DBSCAN (eps={PHASH_DISTANCE_THRESHOLD}, metric=hamming) ---")
 
-    print("\n--- Grouping similar images by perceptual hash (distance <= threshold) ---")
-    ids_to_delete = []
-    kept_ids_info = {} # Optional: Can still track kept IDs if needed for logging
+    if not phashes_and_ids:
+        print("No valid hashes generated, skipping clustering and deletion.")
+        ids_to_delete = []
+    else:
+        # Prepare data for DBSCAN
+        # Extract hashes into a list
+        hashes_list = [p_id[0] for p_id in phashes_and_ids]
+        # Extract corresponding IDs
+        ids_list = [p_id[1] for p_id in phashes_and_ids]
+        # Convert ImageHash objects to NumPy boolean arrays suitable for hamming distance
+        hash_arrays = np.array([h.hash.flatten() for h in hashes_list])
 
-    can_check_metadata = bool(PG_METADATA_TABLE_NAME and PG_METADATA_FK_COLUMN_NAME)
-    i = 0
-    while i < len(phashes_and_ids):
-        # Start a new group with the current item
-        current_group_ids = [phashes_and_ids[i][1]]
-        current_group_hashes = [phashes_and_ids[i][0]] # Store hashes for logging/debugging if needed
-        last_hash_in_group = phashes_and_ids[i][0]
+        # Apply DBSCAN
+        # min_samples=2 means a cluster must have at least 2 points (a duplicate)
+        # Points not part of any cluster will be labeled -1 (noise) and are considered unique
+        print("Running DBSCAN clustering...")
+        db = DBSCAN(eps=PHASH_DISTANCE_THRESHOLD, min_samples=2, metric='hamming').fit(hash_arrays)
+        labels = db.labels_
+        print(f"DBSCAN finished. Found {len(set(labels)) - (1 if -1 in labels else 0)} duplicate clusters.")
 
-        # Look ahead to find items within the threshold
-        j = i + 1
-        while j < len(phashes_and_ids):
-            next_phash, next_id = phashes_and_ids[j]
-            # Check difference against the *last* hash added to the group
-            if next_phash - last_hash_in_group <= PHASH_DISTANCE_THRESHOLD:
-                current_group_ids.append(next_id)
-                current_group_hashes.append(next_phash)
-                # Update the last hash *only* if we add the item,
-                # maintaining the chain of similarity
-                last_hash_in_group = next_phash
-                j += 1
-            else:
-                # The next item is too different, stop extending the current group
-                break
+        # Group IDs by cluster label
+        clusters = defaultdict(list)
+        for i, label in enumerate(labels):
+            # Only group items that are part of a cluster (label != -1)
+            if label != -1:
+                clusters[label].append(ids_list[i]) # Group original IDs by cluster label
 
-        # Process the identified group
-        if len(current_group_ids) > 1:
-            keep_id = None
-            # --- Keep ID selection logic (same as before) ---
-            if can_check_metadata:
-                ids_with_meta = get_ids_with_metadata(pg_conn, current_group_ids)
-                if len(ids_with_meta) == 1:
-                    keep_id = list(ids_with_meta)[0]
-                    # Optional: print(f"  Group (hashes ~{current_group_hashes[0]}): Keeping ID {keep_id} (has metadata).")
-                elif len(ids_with_meta) > 1:
-                    # Keep the one associated with the *first* ID encountered in the *original* group list
-                    # This requires mapping back from ID to its original position or keeping the one
-                    # corresponding to the smallest hash (which is already first due to sorting)
-                    # Let's keep the one corresponding to the first ID in current_group_ids,
-                    # which should have the smallest hash in this metadata subset.
-                    potential_keeps = [id_ for id_ in current_group_ids if id_ in ids_with_meta]
-                    keep_id = potential_keeps[0] # Keep the one with the lowest phash among those with metadata
-                    # Optional: print(f"  Warning: Group (hashes ~{current_group_hashes[0]}): Multiple have metadata: {ids_with_meta}. Keeping {keep_id} (lowest hash).")
+        ids_to_delete = []
+        can_check_metadata = bool(PG_METADATA_TABLE_NAME and PG_METADATA_FK_COLUMN_NAME)
 
-            if keep_id is None:
-                # Keep the first element (lowest phash) if no metadata preference
-                keep_id = current_group_ids[0]
-                # Optional: if can_check_metadata: print(f"  Group (hashes ~{current_group_hashes[0]}): None have metadata. Keeping first encountered: {keep_id}.")
+        # Process each cluster to decide which ID to keep
+        print(f"Processing {len(clusters)} duplicate clusters to determine items for deletion...")
+        for label, current_group_ids in clusters.items():
+            if len(current_group_ids) > 1: # Should always be true based on min_samples=2
+                keep_id = None
+                # --- Keep ID selection logic (same as before) ---
+                if can_check_metadata:
+                    ids_with_meta = get_ids_with_metadata(pg_conn, current_group_ids)
+                    if len(ids_with_meta) == 1:
+                        keep_id = list(ids_with_meta)[0]
+                        # Optional: print(f"  Cluster {label}: Keeping ID {keep_id} (has metadata).")
+                    elif len(ids_with_meta) > 1:
+                        # Keep the one with the 'lowest' corresponding phash (or just first encountered ID)
+                        # To keep the logic simple and consistent, let's find the original index
+                        # of these IDs and choose the one that appeared earliest in the phashes_and_ids list
+                        # (which indirectly corresponds to the hash, though maybe not perfectly lowest hash value)
+                        # Or, more simply, just pick the smallest ID among those with metadata.
+                        potential_keeps_meta = [id_ for id_ in current_group_ids if id_ in ids_with_meta]
+                        keep_id = min(potential_keeps_meta) # Keep the smallest ID among those with metadata
+                        # Optional: print(f"  Warning: Cluster {label}: Multiple have metadata: {ids_with_meta}. Keeping smallest ID: {keep_id}.")
 
-            # Add others to delete list
-            delete_ids = [id_ for id_ in current_group_ids if id_ != keep_id]
-            ids_to_delete.extend(delete_ids)
-            # Optional: kept_ids_info[str(current_group_ids)] = keep_id # For logging if needed
-            # Optional: print(f"  Group (hashes ~{current_group_hashes[0]}, size {len(current_group_ids)}): Keeping {keep_id}, marked {len(delete_ids)} for deletion.")
+                if keep_id is None:
+                    # Keep the smallest ID if no metadata preference or no metadata check possible
+                    keep_id = min(current_group_ids)
+                    # Optional: if can_check_metadata: print(f"  Cluster {label}: None have metadata. Keeping smallest ID: {keep_id}.")
+                    # Optional: else: print(f"  Cluster {label}: Keeping smallest ID: {keep_id}.")
 
 
-        # Move the outer loop index past the group we just processed
-        i = j # Start the next group check from where the inner loop stopped
+                # Add others to delete list
+                delete_ids_in_cluster = [id_ for id_ in current_group_ids if id_ != keep_id]
+                ids_to_delete.extend(delete_ids_in_cluster)
+                # Optional: print(f"  Cluster {label} (size {len(current_group_ids)}): Keeping {keep_id}, marked {len(delete_ids_in_cluster)} for deletion.")
 
-    print(f"\nIdentified {len(ids_to_delete)} duplicate items based on sorted hash proximity.")
-    # This replaces the previous "unique image groups" count, which might differ slightly.
-    # The old method counted groups; this counts items *to be deleted*.
-    # The number of *kept* items (total - deleted) might be a better comparison point.
-
-    # --- The rest of the deletion logic remains the same ---
+    # --- Deletion Logic (Remains the same) ---
     print(f"\nTotal unique PostgreSQL IDs marked for deletion: {len(ids_to_delete)}")
 
     # 4. Delete Duplicates from PostgreSQL (No Confirmation Prompt)
@@ -245,14 +239,20 @@ def process_duplicates():
             print("\n--- DRY RUN MODE ---")
             print(f"Would delete {len(ids_to_delete)} duplicate entries with the following IDs:")
             batch_size = 20
+            # Sort for clearer output (optional)
+            ids_to_delete.sort()
             for i in range(0, len(ids_to_delete), batch_size):
                 print(f"  {ids_to_delete[i:i+batch_size]}")
             print("--- END DRY RUN ---")
         else:
             print("\n--- DELETING DUPLICATES (NO CONFIRMATION) ---")
             print(f"Proceeding to delete {len(ids_to_delete)} entries from '{PG_TABLE_NAME}'.")
+            # Sort for potentially better locality if IDs are sequential (optional)
+            ids_to_delete.sort()
             try:
                 with pg_conn.cursor() as cur:
+                    # Consider using DELETE ... WHERE id = ANY(%s) for batching if supported and efficient
+                    # For now, stick to individual deletes with delay
                     delete_query = f"DELETE FROM {PG_TABLE_NAME} WHERE {PG_ID_COLUMN_NAME} = %s;"
                     for item_id in ids_to_delete:
                         try:
@@ -267,23 +267,23 @@ def process_duplicates():
                                 time.sleep(DELETE_DELAY_SECONDS)
                         except psycopg2.Error as delete_err:
                             print(f"Error deleting ID {item_id}: {delete_err}. Rolling back this attempt.", file=sys.stderr)
-                            pg_conn.rollback()
-                    pg_conn.commit()
+                            pg_conn.rollback() # Rollback individual delete, maybe continue? Or break? For now, just rollback and continue loop
+                    pg_conn.commit() # Commit successful deletions at the end
                 print(f"\nDeletion process finished. Total entries deleted in this run: {total_deleted_count}")
             except psycopg2.Error as e:
                 print(f"\nCRITICAL: Error during deletion transaction: {e}", file=sys.stderr)
                 print("Attempting to rollback transaction.")
                 try: pg_conn.rollback()
                 except Exception as rb_err: print(f"Rollback failed: {rb_err}", file=sys.stderr)
-                total_deleted_count = 0
+                total_deleted_count = 0 # Reset count as transaction failed
             except Exception as e:
                 print(f"\nCRITICAL: Unexpected error during deletion: {e}", file=sys.stderr)
                 print("Attempting to rollback transaction.")
                 try: pg_conn.rollback()
                 except Exception as rb_err: print(f"Rollback failed: {rb_err}", file=sys.stderr)
-                total_deleted_count = 0
+                total_deleted_count = 0 # Reset count as transaction failed
 
-    # 5. Report Final Results
+    # 5. Report Final Results (Remains the same)
     print("\n--- Final Summary ---")
     print(f"Total PostgreSQL items processed: {total_pg_items}")
     if error_summary:
@@ -291,7 +291,7 @@ def process_duplicates():
         print(f"Failed or skipped items during hashing: {total_errors}")
         for reason, count in error_summary.most_common():
             print(f"  - {reason}: {count}")
-    print(f"\nDuplicate instances identified in PostgreSQL: {len(ids_to_delete)}")
+    print(f"\nDuplicate instances identified via clustering: {len(ids_to_delete)}")
     if DRY_RUN:
         print(f"Action: DRY RUN - No entries were deleted.")
     elif total_deleted_count > 0:
