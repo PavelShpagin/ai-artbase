@@ -2,7 +2,6 @@ fastapi
 uvicorn
 sqlalchemy
 chromadb
-chromadb-client
 python-multipart
 python-jose[cryptography]
 passlib[bcrypt]
@@ -25,3 +24,9 @@ imagehash
 pillow
 scikit-learn
 numpy
+asyncio
+google-cloud-aiplatform
+greenlet
+httpx
+tqdm
+uuid

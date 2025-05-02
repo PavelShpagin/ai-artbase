@@ -43,6 +43,7 @@ import {
   ModalCloseButton,
   IconButton,
   useBreakpointValue,
+  Tooltip,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import {
@@ -177,30 +178,63 @@ const BottomNavigation = ({ onUploadClick, onGenerateClick }) => {
       alignItems="center"
       zIndex="sticky" // Ensure it's above content
     >
-      <IconButton
-        aria-label="Home"
-        icon={<Icon as={FiHome} boxSize={6} />}
-        size="lg"
-        variant="ghost"
-        onClick={handleHomeClick}
-        colorScheme="purple"
-      />
-      <IconButton
-        aria-label="Upload Image"
-        icon={<Icon as={FiUpload} boxSize={6} />}
-        size="lg"
-        variant="ghost"
-        onClick={onUploadClick} // Use passed handler
-        colorScheme="purple"
-      />
-      <IconButton
-        aria-label="Generate Image"
-        icon={<Icon as={FiCpu} boxSize={6} />}
-        size="lg"
-        variant="ghost"
-        onClick={onGenerateClick} // Use passed handler
-        colorScheme="purple"
-      />
+      <Tooltip
+        label="Home"
+        aria-label="Home tooltip"
+        placement="top"
+        bg={useColorModeValue("purple.100", "purple.700")}
+        color={useColorModeValue("purple.600", "purple.200")}
+        py={1}
+        px={2}
+        borderRadius="md"
+      >
+        <IconButton
+          aria-label="Home"
+          icon={<Icon as={FiHome} boxSize={6} />}
+          size="lg"
+          variant="ghost"
+          onClick={handleHomeClick}
+          colorScheme="purple"
+        />
+      </Tooltip>
+      <Tooltip
+        label="Upload"
+        aria-label="Upload tooltip"
+        placement="top"
+        bg={useColorModeValue("purple.100", "purple.700")}
+        color={useColorModeValue("purple.600", "purple.200")}
+        py={1}
+        px={2}
+        borderRadius="md"
+      >
+        <IconButton
+          aria-label="Upload"
+          icon={<Icon as={FiUpload} boxSize={6} />}
+          size="lg"
+          variant="ghost"
+          onClick={onUploadClick} // Use passed handler
+          colorScheme="purple"
+        />
+      </Tooltip>
+      <Tooltip
+        label="Generate"
+        aria-label="Generate tooltip"
+        placement="top"
+        bg={useColorModeValue("purple.100", "purple.700")}
+        color={useColorModeValue("purple.600", "purple.200")}
+        py={1}
+        px={2}
+        borderRadius="md"
+      >
+        <IconButton
+          aria-label="Generate"
+          icon={<Icon as={FiCpu} boxSize={6} />}
+          size="lg"
+          variant="ghost"
+          onClick={onGenerateClick} // Use passed handler
+          colorScheme="purple"
+        />
+      </Tooltip>
     </Box>
   );
 };
@@ -477,28 +511,50 @@ const Header = () => {
         <Flex align="center" gap={{ base: 1, md: 2 }} flexShrink={0}>
           {" "}
           {/* Prevent shrinking */}
+          {/* Desktop Upload/Generate Buttons - Always shown */}
+          <Box display={{ base: "none", md: "flex" }} gap={2}>
+            <Tooltip
+              label="Generate"
+              aria-label="Generate tooltip"
+              placement="top"
+              bg={useColorModeValue("purple.100", "purple.700")}
+              color={useColorModeValue("purple.600", "purple.200")}
+              py={1}
+              px={2}
+              borderRadius="full"
+            >
+              <IconButton
+                aria-label="Generate"
+                icon={<Icon as={FiCpu} boxSize={6} />}
+                size="lg"
+                variant="ghost"
+                onClick={handleGenerateClick}
+                colorScheme="purple"
+              />
+            </Tooltip>
+            <Tooltip
+              label="Upload"
+              aria-label="Upload tooltip"
+              placement="top"
+              bg={useColorModeValue("purple.100", "purple.700")}
+              color={useColorModeValue("purple.600", "purple.200")}
+              py={1}
+              px={2}
+              borderRadius="full"
+            >
+              <IconButton
+                aria-label="Upload"
+                icon={<Icon as={FiUpload} boxSize={6} />}
+                size="lg"
+                variant="ghost"
+                onClick={handleUploadClick}
+                colorScheme="purple"
+              />
+            </Tooltip>
+          </Box>
           {/* Conditional Rendering based on token/user */}
           {localStorage.getItem("token") && user ? (
             <>
-              {/* Desktop Upload/Generate Buttons */}
-              <Box display={{ base: "none", md: "flex" }} gap={2}>
-                <IconButton
-                  aria-label="Generate Image"
-                  icon={<Icon as={FiCpu} boxSize={6} />}
-                  size="lg"
-                  variant="ghost"
-                  onClick={handleGenerateClick}
-                  colorScheme="purple"
-                />
-                <IconButton
-                  aria-label="Upload Image"
-                  icon={<Icon as={FiUpload} boxSize={6} />}
-                  size="lg"
-                  variant="ghost"
-                  onClick={handleUploadClick}
-                  colorScheme="purple"
-                />
-              </Box>
               {/* User Menu */}
               <UserMenu
                 user={user}
@@ -534,8 +590,8 @@ const Header = () => {
         onClose={handleSignInModalClose}
       />
 
-      {/* Render Bottom Navigation only if logged in on mobile */}
-      {localStorage.getItem("token") && user && isMobile && (
+      {/* Render Bottom Navigation only on mobile */}
+      {isMobile && (
         <BottomNavigation
           onUploadClick={handleUploadClick}
           onGenerateClick={handleGenerateClick}

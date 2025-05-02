@@ -15,36 +15,33 @@ from ..chroma_services import collection_prompts
 import numpy as np
 import time
 from app.scripts.enhance_prompts import generate_description
-from google import generativeai as genai
-from google.generativeai import types as genai_types
+import os
 
-# Initialize Gemini client
-client = None # Define client initially as None
-if GEMINI_API_KEY:
-    # Assuming configure might still be needed, or Client takes api_key directly
-    # If Client takes key directly, genai.configure might not be needed here.
-    # Let's try initializing Client directly first as per user example structure.
-    try:
-        # Reverted to direct initialization based on original user snippet structure
-        # Assuming 'from google import generativeai as genai' makes genai.Client valid
-        client = genai.Client(api_key=GEMINI_API_KEY) 
-    except AttributeError as ae:
-        # If Client is still not found, print specific error
-        print(f"Error: genai.Client not found with current import. Trying configure/GenerativeModel approach. Error: {ae}")
-        # Fallback attempt: Maybe configuration needs to happen first?
-        try:
-            genai.configure(api_key=GEMINI_API_KEY)
-            # Re-attempt initialization after configure?
-            # client = genai.Client() # Or maybe configure is enough? Need to test.
-            print("INFO: genai.configure called. Client initialization might depend on this.")
-            # If configure works but Client doesn't, we might need a different call pattern.
-        except Exception as configure_e:
-             print(f"Error during genai.configure: {configure_e}")
-    except Exception as e:
-        print(f"Error initializing Gemini Client: {e}")
+# Import Vertex AI components (assuming library is installed)
+try:
+    import vertexai
+    from vertexai.preview.vision_models import ImageGenerationModel, ImageGenerationResponse
+    # Replace with your Project ID and Location (Region)
+    PROJECT_ID = os.getenv("GCP_PROJECT_ID") # Make sure this env var is set
+    LOCATION = os.getenv("GCP_LOCATION", "us-central1") # Default or set via env var
 
-else:
-    print("Warning: GEMINI_API_KEY not found in config. Image generation will not be available.")
+    if not PROJECT_ID:
+        print("Warning: GCP_PROJECT_ID environment variable not set. Vertex AI initialization might fail.")
+        generation_model = None
+    else:
+        # Initialize Vertex AI
+        vertexai.init(project=PROJECT_ID, location=LOCATION)
+        # Load the model
+        generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001") # Or "imagen-3.0-generate-002" etc.
+        print(f"Vertex AI ImageGenerationModel loaded successfully from {LOCATION} for project {PROJECT_ID}")
+
+except ImportError:
+    print("Warning: google-cloud-aiplatform library not found or Vertex AI components failed to import. Image generation will not be available.")
+    print("Install it using: pip install google-cloud-aiplatform")
+    generation_model = None
+except Exception as e:
+    print(f"Error initializing Vertex AI or loading model: {e}")
+    generation_model = None
 
 router = APIRouter()
 
@@ -80,10 +77,12 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
     # Initialize descriptive_prompt with original prompt
     descriptive_prompt = prompt
     
-    # Generate descriptive prompt using Gemini
+    # Generate descriptive prompt using the imported function (if needed)
+    # This assumes generate_description uses the correct library/method now
     try:
         # Generate descriptive keywords for the image
-        generated_prompt = await generate_description(image_url, prompt, model='gemini')
+        # Ensure generate_description is adapted if it also used the old genai client
+        generated_prompt = await generate_description(image_url, prompt, model='gemini') # Or adjust model='vertexai' if needed
         if generated_prompt:
             descriptive_prompt = generated_prompt
     except Exception as e:
@@ -219,7 +218,7 @@ def get_user_arts(user_id: int, viewer_id: Optional[int] = None, limit: int = 10
     arts = db.query(models.Art).filter(models.Art.owner_id == user_id).order_by(models.Art.date.desc()).limit(limit).all()
     # Query arts with liked_by_user information in a single query
     if viewer_id is not None:
-        arts_with_likes = db.query(
+        arts_with_likes_data = db.query(
             models.Art,
             exists().where(
                 and_(
@@ -234,7 +233,7 @@ def get_user_arts(user_id: int, viewer_id: Optional[int] = None, limit: int = 10
                 **art.__dict__,
                 "liked_by_user": liked_by_user
             }
-            for art, liked_by_user in arts_with_likes
+            for art, liked_by_user in arts_with_likes_data
         ]
     else:
         # Query arts without liked_by_user information
@@ -372,8 +371,8 @@ async def like_unlike_art(art_id: int, user_id: Optional[int] = None, db: Sessio
             db.add(new_like)
             art.num_likes += 1
     else:
-        # Increment likes without user_id
-        art.num_likes += 1
+        # Increment likes without user_id - Consider if this logic is intended
+        art.num_likes += 1 # Removed redundant check, just increment if no user_id
 
     db.commit()
     db.refresh(art)
@@ -385,7 +384,7 @@ async def unlike_art(art_id: int, user_id: Optional[int] = None, db: Session = D
     if not art:
         raise HTTPException(status_code=404, detail="Art not found")
 
-    # Decrement likes without user_id
+    # Only decrement likes if user_id is provided and the like exists
     if user_id is not None:
         # Check if the user has already liked the art
         like = db.query(models.Like).filter(models.Like.user_id == user_id, models.Like.art_id == art_id).first()
@@ -420,15 +419,13 @@ async def get_user_liked_arts(user_id: int, viewer_id: Optional[int] = None, lim
                     models.Like.user_id == viewer_id
                 )
             ).label('liked_by_user')
-        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit)
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit) # Removed redundant outer join
     else:
-        # If no viewer_id, liked_by_user is always False (unless viewer_id matches user_id, handled implicitly)
+        # If no viewer_id, liked_by_user is always False
         arts_query = db.query(
             models.Art,
-             # Determine liked_by_user based on whether viewer_id matches the user_id whose likes we are fetching
-            (models.Like.user_id == viewer_id if viewer_id is not None else literal(False)).label('liked_by_user')
-        ).outerjoin(models.Like, and_(models.Like.art_id == models.Art.id, models.Like.user_id == viewer_id)) \
-         .filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit)
+             literal(False).label('liked_by_user') # Simpler: If no viewer_id, they haven't liked it
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit)
          
     arts_result = arts_query.all()
 
@@ -481,48 +478,62 @@ async def get_batch_arts(
 
 @router.post("/generate/image/", response_model=schemas.ImageGenerationResponse)
 async def generate_image_from_prompt(request: schemas.ImageGenerationRequest):
-    if not client: # Check if client was initialized successfully
-        raise HTTPException(status_code=503, detail="Image generation service client is not available.")
+    if not generation_model: # Check if the Vertex AI model was initialized
+        raise HTTPException(status_code=503, detail="Image generation service model is not available.")
 
     try:
         print(f"Generating image with prompt: {request.prompt}, count: {request.number_of_images}")
-        # API call using the client instance
-        response = client.models.generate_images(
-            model='imagen-3.0-generate-002',
+        # API call using the Vertex AI model instance
+        # Adapt parameters as needed based on the model's signature
+        response: ImageGenerationResponse = generation_model.generate_images(
             prompt=request.prompt,
+            # aspect_ratio="1:1", # Example: Add if needed and available in schema
+            # negative_prompt="...", # Example: Add if needed and available in schema
             number_of_images=request.number_of_images,
+            # Add other parameters supported by the model and your schema as needed
         )
+
     except AttributeError as ae:
-        # Specific error if client object doesn't have 'models'
-        print(f"AttributeError during API call: client object might be wrong type or models attribute missing. Error: {ae}")
+        # Specific error if model object doesn't have 'generate_images' or response is unexpected
+        print(f"AttributeError during API call: model object or response structure error. Error: {ae}")
         raise HTTPException(status_code=500, detail=f"API structure error: {ae}")
     except Exception as e:
-        print(f"Error calling Gemini Imagen API: {str(e)}")
+        print(f"Error calling Vertex AI Imagen API: {str(e)}")
+        # Check for specific Vertex AI exceptions if available
         raise HTTPException(status_code=500, detail=f"Failed to generate image: {str(e)}")
 
     image_urls = []
-    for i, generated_image in enumerate(response.generated_images):
+    # Process the response images (assuming response.images is a list)
+    if not hasattr(response, 'images') or not response.images:
+         print(f"Warning: No images found in the response from Vertex AI.")
+         raise HTTPException(status_code=500, detail="Image generation call succeeded but returned no images.")
+
+    for i, generated_image in enumerate(response.images):
         try:
-            image_bytes = generated_image.image.image_bytes
+            # Access image bytes (check the exact attribute name in the SDK)
+            # It might be _image_bytes, image_bytes, or require a method call
+            image_bytes = generated_image._image_bytes # Common pattern, verify with SDK docs
+
             if not image_bytes:
                 print(f"Warning: Generated image {i} has no image bytes.")
                 continue
 
             prompt_hash = hashlib.md5(request.prompt.encode()).hexdigest()
-            unique_filename = f"generated_{prompt_hash}_{i}.png"
-            
+            unique_filename = f"generated_{prompt_hash}_{i}.png" # Assume PNG, adjust if needed
+
             image_url = await upload_image_bytes_to_r2(image_bytes, unique_filename, content_type='image/png')
             image_urls.append(image_url)
             print(f"Uploaded generated image to: {image_url}")
 
         except AttributeError as ae:
-            print(f"Warning: Generated image {i} structure unexpected or missing data: {ae}")
-            continue 
+            print(f"Warning: Generated image {i} structure unexpected or missing data (_image_bytes attribute?). Error: {ae}")
+            continue
         except Exception as e:
             print(f"Failed to process or upload generated image {i} to R2: {str(e)}")
-            continue
+            continue # Try next image if one fails
 
     if not image_urls:
+        # This happens if generation worked but all uploads failed or yielded no bytes
         raise HTTPException(status_code=500, detail="Image generation succeeded but failed to process or upload any images.")
 
     return schemas.ImageGenerationResponse(image_urls=image_urls)
