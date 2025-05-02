@@ -413,13 +413,13 @@ const Header = () => {
               <Box display={{ base: "none", md: "flex" }}>
                 {/* Point to hidden file input */}
                 <PurpleButton
-                  name="Upload"
+                  name="Create"
                   onClick={() =>
                     document.getElementById("file-upload")?.click()
                   }
                 />
               </Box>
-              <Box display={{ base: "flex", md: "none" }}>
+              {/* <Box display={{ base: "flex", md: "none" }}>
                 <PurpleButton
                   name={<MdFileUpload size="1.2em" />} // Use icon with adjusted size
                   onClick={() =>
@@ -428,7 +428,7 @@ const Header = () => {
                   px={3} // Adjust padding for icon button
                   py={3} // Make it squarer
                 />
-              </Box>
+              </Box> */}
               {/* Hidden File Input */}
               {/* <Input
                 type="file"

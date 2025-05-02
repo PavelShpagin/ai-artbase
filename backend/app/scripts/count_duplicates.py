@@ -162,45 +162,79 @@ def process_duplicates():
                 error_summary["future_exception"] += 1
     print(f"\nFinished perceptual hashing {processed_count} PostgreSQL items.")
 
-    # Group IDs by perceptual hash similarity
-    print("\n--- Grouping similar images by perceptual hash (distance <= threshold) ---")
-    groups = []  # Each group is a list of IDs
-    used = set()
-    for i, (phash1, id1) in enumerate(phashes_and_ids):
-        if id1 in used:
-            continue
-        group = [id1]
-        used.add(id1)
-        for j in range(i + 1, len(phashes_and_ids)):
-            phash2, id2 = phashes_and_ids[j]
-            if id2 in used:
-                continue
-            if phash1 - phash2 <= PHASH_DISTANCE_THRESHOLD:
-                group.append(id2)
-                used.add(id2)
-        groups.append(group)
+    # --- Efficient Grouping by Perceptual Hash ---
+    print("\n--- Sorting hashes for efficient grouping ---")
+    phashes_and_ids.sort(key=lambda item: item[0]) # Sort by phash
+    print(f"Sorted {len(phashes_and_ids)} items.")
 
-    print(f"\nIdentified {len(groups)} unique image groups (by perceptual hash).")
-    # For each group, keep one, delete the rest
+    print("\n--- Grouping similar images by perceptual hash (distance <= threshold) ---")
+    ids_to_delete = []
+    kept_ids_info = {} # Optional: Can still track kept IDs if needed for logging
+
     can_check_metadata = bool(PG_METADATA_TABLE_NAME and PG_METADATA_FK_COLUMN_NAME)
-    for group in groups:
-        if len(group) > 1:
+    i = 0
+    while i < len(phashes_and_ids):
+        # Start a new group with the current item
+        current_group_ids = [phashes_and_ids[i][1]]
+        current_group_hashes = [phashes_and_ids[i][0]] # Store hashes for logging/debugging if needed
+        last_hash_in_group = phashes_and_ids[i][0]
+
+        # Look ahead to find items within the threshold
+        j = i + 1
+        while j < len(phashes_and_ids):
+            next_phash, next_id = phashes_and_ids[j]
+            # Check difference against the *last* hash added to the group
+            if next_phash - last_hash_in_group <= PHASH_DISTANCE_THRESHOLD:
+                current_group_ids.append(next_id)
+                current_group_hashes.append(next_phash)
+                # Update the last hash *only* if we add the item,
+                # maintaining the chain of similarity
+                last_hash_in_group = next_phash
+                j += 1
+            else:
+                # The next item is too different, stop extending the current group
+                break
+
+        # Process the identified group
+        if len(current_group_ids) > 1:
             keep_id = None
+            # --- Keep ID selection logic (same as before) ---
             if can_check_metadata:
-                ids_with_meta = get_ids_with_metadata(pg_conn, group)
+                ids_with_meta = get_ids_with_metadata(pg_conn, current_group_ids)
                 if len(ids_with_meta) == 1:
                     keep_id = list(ids_with_meta)[0]
-                    print(f"  Group {group}: Keeping ID {keep_id} (has metadata).")
+                    # Optional: print(f"  Group (hashes ~{current_group_hashes[0]}): Keeping ID {keep_id} (has metadata).")
                 elif len(ids_with_meta) > 1:
-                    keep_id = sorted(list(ids_with_meta))[0]
-                    print(f"  Warning: Group {group}: Multiple have metadata: {ids_with_meta}. Keeping first: {keep_id}.")
+                    # Keep the one associated with the *first* ID encountered in the *original* group list
+                    # This requires mapping back from ID to its original position or keeping the one
+                    # corresponding to the smallest hash (which is already first due to sorting)
+                    # Let's keep the one corresponding to the first ID in current_group_ids,
+                    # which should have the smallest hash in this metadata subset.
+                    potential_keeps = [id_ for id_ in current_group_ids if id_ in ids_with_meta]
+                    keep_id = potential_keeps[0] # Keep the one with the lowest phash among those with metadata
+                    # Optional: print(f"  Warning: Group (hashes ~{current_group_hashes[0]}): Multiple have metadata: {ids_with_meta}. Keeping {keep_id} (lowest hash).")
+
             if keep_id is None:
-                keep_id = group[0]
-                if can_check_metadata:
-                    print(f"  Group {group}: None have metadata. Keeping first encountered: {keep_id}.")
-            delete_ids = [id_ for id_ in group if id_ != keep_id]
+                # Keep the first element (lowest phash) if no metadata preference
+                keep_id = current_group_ids[0]
+                # Optional: if can_check_metadata: print(f"  Group (hashes ~{current_group_hashes[0]}): None have metadata. Keeping first encountered: {keep_id}.")
+
+            # Add others to delete list
+            delete_ids = [id_ for id_ in current_group_ids if id_ != keep_id]
             ids_to_delete.extend(delete_ids)
-            kept_ids_info[str(group)] = keep_id
+            # Optional: kept_ids_info[str(current_group_ids)] = keep_id # For logging if needed
+            # Optional: print(f"  Group (hashes ~{current_group_hashes[0]}, size {len(current_group_ids)}): Keeping {keep_id}, marked {len(delete_ids)} for deletion.")
+
+
+        # Move the outer loop index past the group we just processed
+        i = j # Start the next group check from where the inner loop stopped
+
+    print(f"\nIdentified {len(ids_to_delete)} duplicate items based on sorted hash proximity.")
+    # This replaces the previous "unique image groups" count, which might differ slightly.
+    # The old method counted groups; this counts items *to be deleted*.
+    # The number of *kept* items (total - deleted) might be a better comparison point.
+
+    # --- The rest of the deletion logic remains the same ---
     print(f"\nTotal unique PostgreSQL IDs marked for deletion: {len(ids_to_delete)}")
 
     # 4. Delete Duplicates from PostgreSQL (No Confirmation Prompt)
@@ -252,7 +286,6 @@ def process_duplicates():
     # 5. Report Final Results
     print("\n--- Final Summary ---")
     print(f"Total PostgreSQL items processed: {total_pg_items}")
-    print(f"Unique image groups found (by perceptual hash): {len(groups)}")
     if error_summary:
         total_errors = sum(error_summary.values())
         print(f"Failed or skipped items during hashing: {total_errors}")
