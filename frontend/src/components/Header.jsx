@@ -172,7 +172,7 @@ const BottomNavigation = ({ onUploadClick, onGenerateClick }) => {
       bg={useColorModeValue("white", "gray.800")}
       borderTopWidth="1px"
       borderTopColor={useColorModeValue("gray.200", "gray.700")}
-      p={2}
+      p={1}
       display={{ base: "flex", md: "none" }} // Show only on mobile
       justifyContent="space-around"
       alignItems="center"

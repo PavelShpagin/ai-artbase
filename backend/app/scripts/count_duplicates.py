@@ -10,7 +10,7 @@ from PIL import Image
 import imagehash
 from io import BytesIO
 import numpy as np # <-- Add numpy import
-from sklearn.cluster import BIRCH # <-- Import BIRCH
+from sklearn.cluster import MiniBatchKMeans
 
 # --- Configuration from Environment Variables ---
 # PostgreSQL
@@ -162,40 +162,33 @@ def process_duplicates():
                 error_summary["future_exception"] += 1
     print(f"\nFinished perceptual hashing {processed_count} PostgreSQL items.")
 
-    # --- Clustering with BIRCH ---
-    # Note: BIRCH uses Euclidean distance. We use boolean arrays (0/1) derived from phash.
+    # --- Clustering with MiniBatchKMeans ---
+    # Note: MiniBatchKMeans uses Euclidean distance. We use boolean arrays (0/1) derived from phash.
     # The squared Euclidean distance between these is equal to the Hamming distance.
-    # So, BIRCH threshold should be approx. sqrt(desired Hamming threshold).
-    birch_threshold = np.sqrt(PHASH_DISTANCE_THRESHOLD)
-    print(f"\n--- Clustering {len(phashes_and_ids)} images using BIRCH (threshold={birch_threshold:.4f}, derived from Hamming threshold {PHASH_DISTANCE_THRESHOLD}) ---")
+    # So, MiniBatchKMeans threshold should be approx. sqrt(desired Hamming threshold).
+    mbk_threshold = np.sqrt(PHASH_DISTANCE_THRESHOLD)
+    print(f"\n--- Clustering {len(phashes_and_ids)} images using MiniBatchKMeans (threshold={mbk_threshold:.4f}, derived from Hamming threshold {PHASH_DISTANCE_THRESHOLD}) ---")
 
     if not phashes_and_ids:
         print("No valid hashes generated, skipping clustering and deletion.")
         ids_to_delete = []
     else:
-        # Prepare data for BIRCH
+        # Prepare data for MiniBatchKMeans
         hashes_list = [p_id[0] for p_id in phashes_and_ids]
         ids_list = [p_id[1] for p_id in phashes_and_ids]
-        # Convert ImageHash objects to NumPy float arrays (0.0/1.0) for BIRCH
+        # Convert ImageHash objects to NumPy float arrays (0.0/1.0) for MiniBatchKMeans
         hash_arrays = np.array([h.hash.flatten().astype(float) for h in hashes_list])
 
-        # Apply BIRCH
-        # n_clusters=None: Performs leaf-node clustering. Each leaf CF node acts as a cluster.
-        print("Running BIRCH clustering...")
-        # Increase default threshold slightly if PHASH_DISTANCE_THRESHOLD is very low
-        # This prevents potentially creating too many tiny clusters for near-identical images
-        # A threshold < 1 means only *identical* hashes would cluster. Let's ensure it's at least 1.
-        adjusted_threshold = max(1.0, birch_threshold)
-        if adjusted_threshold != birch_threshold:
-            print(f"Adjusted BIRCH threshold to {adjusted_threshold:.4f} to allow non-identical matches.")
-
-        # We can provide precomputed distances if needed, but let's try direct input first.
-        # If memory becomes an issue with hash_arrays, consider processing in batches or exploring BIRCH options further.
-        model = BIRCH(threshold=adjusted_threshold, n_clusters=None, branching_factor=50) # Keep branching_factor default for now
-        model.fit(hash_arrays)
-        labels = model.labels_ # Get cluster labels for each point
+        # Apply MiniBatchKMeans
+        # n_clusters is the desired number of clusters
+        # batch_size controls how many samples are used in each iteration
+        print("Running MiniBatchKMeans clustering...")
+        mbk = MiniBatchKMeans(n_clusters=8, batch_size=1000, random_state=0)
+        mbk.fit(hash_arrays)
+        labels = mbk.labels_ # Get cluster labels for each point
+        cluster_centers = mbk.cluster_centers_
         unique_labels = set(labels)
-        print(f"BIRCH finished. Found {len(unique_labels)} potential duplicate clusters (CF tree leaf nodes).")
+        print(f"MiniBatchKMeans finished. Found {len(unique_labels)} potential duplicate clusters (CF tree leaf nodes).")
 
         # Group IDs by cluster label
         clusters = defaultdict(list)
