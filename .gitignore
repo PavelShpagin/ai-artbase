@@ -39,8 +39,15 @@ scraper/node_modules
 *.tar.lzma
 
 backend/chroma_data/*
+backend/chroma_data
+
 chroma_data/*
+chroma_data
+
 _backup/*
 
 backend/venv/*
 backend/venv
+
+backend/postgres_data/*
+backend/postgres_data

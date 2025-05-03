@@ -69,7 +69,7 @@ const ArtDetailPage = () => {
       // Check if user has changed and we need to update likes
       if (
         user?.id !== prevUserRef.current?.id &&
-        sessionStorage.getItem(storageKey)
+        localStorage.getItem(storageKey)
       ) {
         const artIds = extractStoredArtIds(storageKey);
 
@@ -82,13 +82,13 @@ const ArtDetailPage = () => {
 
           if (updatedArts) {
             console.log("updatedArts", updatedArts);
-            sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
-            // Update visibleArts in sessionStorage with first batch of updatedArts
+            localStorage.setItem(storageKey, JSON.stringify(updatedArts));
+            // Update visibleArts in localStorage with first batch of updatedArts
             const visibleArtsKey = `visibleArts-detail-${location.pathname}`;
-            const visibleArtsCount = sessionStorage.getItem(visibleArtsKey)
-              ? JSON.parse(sessionStorage.getItem(visibleArtsKey)).length
+            const visibleArtsCount = localStorage.getItem(visibleArtsKey)
+              ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
               : 0;
-            sessionStorage.setItem(
+            localStorage.setItem(
               visibleArtsKey,
               JSON.stringify(updatedArts.slice(0, visibleArtsCount))
             );
@@ -99,8 +99,8 @@ const ArtDetailPage = () => {
       // Update previous user reference
       prevUserRef.current = user;
 
-      // Continue with normal fetch if data isn't in session storage
-      if (!sessionStorage.getItem(storageKey)) {
+      // Continue with normal fetch if data isn't in localStorage
+      if (!localStorage.getItem(storageKey)) {
         const endpoint = `/arts/similar${location.pathname}${
           user?.id ? `?viewer_id=${user.id}` : ""
         }`;
@@ -108,7 +108,7 @@ const ArtDetailPage = () => {
         const filteredResponse = response.filter(
           (image) => image.id !== parseInt(location.pathname.substring(1))
         );
-        sessionStorage.setItem(storageKey, JSON.stringify(filteredResponse));
+        localStorage.setItem(storageKey, JSON.stringify(filteredResponse));
 
         // Store current user ID
         localStorage.setItem(
@@ -124,19 +124,19 @@ const ArtDetailPage = () => {
   useLayoutEffect(() => {
     const fetchArt = async () => {
       if (location.state?.photo) {
-        sessionStorage.setItem(
+        localStorage.setItem(
           `art-showcase-${location.pathname}`,
           JSON.stringify(location.state.photo)
         );
         setArt(location.state?.photo);
         return;
       }
-      if (!sessionStorage.getItem(`art-showcase-${location.pathname}`)) {
+      if (!localStorage.getItem(`art-showcase-${location.pathname}`)) {
         const endpoint = `/arts/id${location.pathname}${
           user?.id ? `?viewer_id=${user.id}` : ""
         }`;
         const response = await fetchAPI(endpoint);
-        sessionStorage.setItem(
+        localStorage.setItem(
           `art-showcase-${location.pathname}`,
           JSON.stringify(response)
         );
@@ -153,7 +153,7 @@ const ArtDetailPage = () => {
         const storedUserId = localStorage.getItem(`${showcaseKey}-user`);
 
         if (storedUserId !== String(user?.id || "null")) {
-          const artData = JSON.parse(sessionStorage.getItem(showcaseKey));
+          const artData = JSON.parse(localStorage.getItem(showcaseKey));
 
           if (artData?.id) {
             const updatedArt = await fetchBatchArtData(
@@ -163,17 +163,14 @@ const ArtDetailPage = () => {
             );
 
             if (updatedArt && updatedArt.length > 0) {
-              sessionStorage.setItem(
-                showcaseKey,
-                JSON.stringify(updatedArt[0])
-              );
+              localStorage.setItem(showcaseKey, JSON.stringify(updatedArt[0]));
               setArt(updatedArt[0]);
               return;
             }
           }
         }
 
-        setArt(JSON.parse(sessionStorage.getItem(showcaseKey)));
+        setArt(JSON.parse(localStorage.getItem(showcaseKey)));
       }
     };
 

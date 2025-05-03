@@ -64,7 +64,7 @@ export const fetchBatchArtData = async (artIds, user, pageKey) => {
  * @returns {Array} - Array of art IDs
  */
 export const extractStoredArtIds = (storageKey) => {
-  const storedArts = sessionStorage.getItem(storageKey);
+  const storedArts = localStorage.getItem(storageKey);
   if (!storedArts) return [];
 
   try {

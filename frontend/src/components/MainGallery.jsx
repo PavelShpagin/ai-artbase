@@ -52,7 +52,7 @@ const MainGallery = () => {
       // Check if we need to update likes information due to user change
       if (
         user?.id !== prevUserRef.current?.id &&
-        sessionStorage.getItem(storageKey)
+        localStorage.getItem(storageKey)
       ) {
         // Extract art IDs from stored data
         const artIds = extractStoredArtIds(storageKey);
@@ -66,16 +66,16 @@ const MainGallery = () => {
           );
 
           if (updatedArts) {
-            // Update session storage with new data
-            sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
+            // Update localStorage with new data
+            localStorage.setItem(storageKey, JSON.stringify(updatedArts));
             console.log("updatedArts", updatedArts);
 
-            // Update visibleArts in sessionStorage with first batch of updatedArts
+            // Update visibleArts in localStorage with first batch of updatedArts
             const visibleArtsKey = `visibleArts-main-${searchQuery}`;
-            const visibleArtsCount = sessionStorage.getItem(visibleArtsKey)
-              ? JSON.parse(sessionStorage.getItem(visibleArtsKey)).length
+            const visibleArtsCount = localStorage.getItem(visibleArtsKey)
+              ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
               : 0;
-            sessionStorage.setItem(
+            localStorage.setItem(
               visibleArtsKey,
               JSON.stringify(updatedArts.slice(0, visibleArtsCount))
             );
@@ -83,7 +83,7 @@ const MainGallery = () => {
             // // Update individual art like statuses
             // updatedArts.forEach((art) => {
             //   const likeKey = `art-like-${art.id}-${user?.id || "guest"}`;
-            //   sessionStorage.setItem(
+            //   localStorage.setItem(
             //     likeKey,
             //     JSON.stringify(art.liked_by_user)
             //   );
@@ -95,8 +95,8 @@ const MainGallery = () => {
       // Update previous user reference
       prevUserRef.current = user;
 
-      // If we already have the data in session storage, return
-      if (sessionStorage.getItem(storageKey)) {
+      // If we already have the data in localStorage, return
+      if (localStorage.getItem(storageKey)) {
         return;
       }
 
@@ -110,7 +110,7 @@ const MainGallery = () => {
       // }
 
       const response = await fetchAPI(endpoint);
-      sessionStorage.setItem(storageKey, JSON.stringify(response));
+      localStorage.setItem(storageKey, JSON.stringify(response));
     } catch (error) {
       console.error("Failed to fetch arts: " + error.message);
     }

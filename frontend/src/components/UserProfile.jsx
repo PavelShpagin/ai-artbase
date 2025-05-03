@@ -31,7 +31,7 @@ const UserProfile = () => {
       // Check if user has changed and we need to update likes
       if (
         currentUser?.id !== prevUserRef.current?.id &&
-        sessionStorage.getItem(storageKey)
+        localStorage.getItem(storageKey)
       ) {
         const artIds = extractStoredArtIds(storageKey);
 
@@ -43,13 +43,13 @@ const UserProfile = () => {
           );
 
           if (updatedArts) {
-            sessionStorage.setItem(storageKey, JSON.stringify(updatedArts));
-            // Update visibleArts in sessionStorage with first batch of updatedArts
+            localStorage.setItem(storageKey, JSON.stringify(updatedArts));
+            // Update visibleArts in localStorage with first batch of updatedArts
             const visibleArtsKey = `visibleArts-profile-${id}`;
-            const visibleArtsCount = sessionStorage.getItem(visibleArtsKey)
-              ? JSON.parse(sessionStorage.getItem(visibleArtsKey)).length
+            const visibleArtsCount = localStorage.getItem(visibleArtsKey)
+              ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
               : 0;
-            sessionStorage.setItem(
+            localStorage.setItem(
               visibleArtsKey,
               JSON.stringify(updatedArts.slice(0, visibleArtsCount))
             );
@@ -60,13 +60,13 @@ const UserProfile = () => {
       // Update previous user reference
       prevUserRef.current = currentUser;
 
-      // If we don't have data in session storage, fetch it
-      if (!sessionStorage.getItem(storageKey)) {
+      // If we don't have data in localStorage, fetch it
+      if (!localStorage.getItem(storageKey)) {
         const endpoint = `/arts/${id}${
           currentUser?.id ? `?viewer_id=${currentUser.id}` : ""
         }`;
         const data = await fetchAPI(endpoint, "GET");
-        sessionStorage.setItem(storageKey, JSON.stringify(data));
+        localStorage.setItem(storageKey, JSON.stringify(data));
 
         // Store current user ID
         localStorage.setItem(`${storageKey}-user`, currentUser?.id || "null");

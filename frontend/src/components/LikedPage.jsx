@@ -22,8 +22,8 @@ const LikedPage = () => {
       // Since this is a user-specific page, we don't need to check for user changes
       // as the page itself is tied to a specific user
 
-      // Check if we already have the data in session storage
-      if (sessionStorage.getItem(storageKey)) {
+      // Check if we already have the data in localStorage
+      if (localStorage.getItem(storageKey)) {
         return;
       }
 
@@ -31,9 +31,9 @@ const LikedPage = () => {
       const endpoint = `/arts/likes/${user.id}?viewer_id=${user.id}`;
       // Fetch the liked arts
       const response = await fetchAPI(endpoint, "GET");
-      // Store in session storage
+      // Store in localStorage
 
-      sessionStorage.setItem(storageKey, JSON.stringify(response));
+      localStorage.setItem(storageKey, JSON.stringify(response));
 
       // Store current user ID
       localStorage.setItem(`${storageKey}-user`, user.id);

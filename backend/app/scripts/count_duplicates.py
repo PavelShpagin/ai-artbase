@@ -36,7 +36,7 @@ REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", 20))
 MAX_IMAGE_SIZE_MB = int(os.getenv("MAX_IMAGE_SIZE_MB", 50))
 MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
 DELETE_DELAY_SECONDS = float(os.getenv("DELETE_DELAY_SECONDS", 0.1)) # Optional delay
-DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
+DRY_RUN = "false"
 PHASH_DISTANCE_THRESHOLD = int(os.getenv("PHASH_DISTANCE_THRESHOLD", 5))
 
 # --- LSH Specific Configuration ---

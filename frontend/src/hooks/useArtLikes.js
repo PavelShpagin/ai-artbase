@@ -47,7 +47,7 @@ const useArtLikes = (artId, user, initialLikedStatus = false) => {
         ];
 
         cacheKeys.forEach((key) => {
-          sessionStorage.removeItem(key);
+          localStorage.removeItem(key);
         });
       }
 
@@ -69,7 +69,7 @@ const useArtLikes = (artId, user, initialLikedStatus = false) => {
 
         if (user?.id) {
           // console.log("UPDATE ALL");
-          // For logged-in users, update all instances in sessionStorage
+          // For logged-in users, update all instances in localStorage
           updateAllArtInstancesInStorage(artId, user.id, newLikedState);
         } else {
           // For guests, use localStorage
@@ -97,18 +97,18 @@ const useArtLikes = (artId, user, initialLikedStatus = false) => {
 function updateAllArtInstancesInStorage(artId, userId, isLiked) {
   // First, update the specific like key for this art
   //   const likeKey = `art-like-${artId}-${userId || "guest"}`;
-  //   sessionStorage.setItem(likeKey, JSON.stringify(isLiked));
+  //   localStorage.setItem(likeKey, JSON.stringify(isLiked));
 
   // Then update all places where this art appears in collections
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const key = sessionStorage.key(i);
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
     if (
       key.startsWith("arts-") ||
       key.startsWith("visibleArts-") ||
       key.startsWith("art-")
     ) {
       try {
-        const storedArts = JSON.parse(sessionStorage.getItem(key));
+        const storedArts = JSON.parse(localStorage.getItem(key));
         if (Array.isArray(storedArts)) {
           let updated = false;
           const updatedArts = storedArts.map((art) => {
@@ -120,7 +120,7 @@ function updateAllArtInstancesInStorage(artId, userId, isLiked) {
           });
 
           if (updated) {
-            sessionStorage.setItem(key, JSON.stringify(updatedArts));
+            localStorage.setItem(key, JSON.stringify(updatedArts));
           }
         }
       } catch (error) {

@@ -159,7 +159,7 @@ const BottomNavigation = ({ onUploadClick, onGenerateClick }) => {
     setSearchQuery(""); // Clear search on home navigation
     setUiSearchQuery("");
     window.scrollTo(0, 0);
-    sessionStorage.setItem("scrollPosition-main-", "0");
+    localStorage.setItem("scrollPosition-main-", "0");
     navigate("/");
   };
 
@@ -362,7 +362,7 @@ const Header = () => {
             setSearchQuery("");
             setUiSearchQuery("");
             window.scrollTo(0, 0);
-            sessionStorage.setItem("scrollPosition-main-", "0");
+            localStorage.setItem("scrollPosition-main-", "0");
             // No need to navigate here if already handled by useEffect
           }}
           to="/"

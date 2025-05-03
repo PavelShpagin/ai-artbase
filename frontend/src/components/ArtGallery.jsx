@@ -398,9 +398,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
         const pathKey = getPathKey();
         console.log("!!!pathKey", pathKey);
-        const storedArts = JSON.parse(
-          sessionStorage.getItem(`arts-${pathKey}`)
-        );
+        const storedArts = JSON.parse(localStorage.getItem(`arts-${pathKey}`));
 
         console.log("!!!storedArts", storedArts);
 
@@ -409,7 +407,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         }
 
         setLayoutHeight(
-          parseInt(sessionStorage.getItem(`layoutHeight-${pathKey}`) || "0", 10)
+          parseInt(localStorage.getItem(`layoutHeight-${pathKey}`) || "0", 10)
         );
 
         setStageStatus((prev) => ({ ...prev, stageFetchingComplete: true }));
@@ -439,8 +437,8 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     }
 
     // Check if we have saved visible arts
-    const savedVisibleArts = sessionStorage.getItem(`visibleArts-${pathKey}`);
-    const savedPage = sessionStorage.getItem(`page-${pathKey}`);
+    const savedVisibleArts = localStorage.getItem(`visibleArts-${pathKey}`);
+    const savedPage = localStorage.getItem(`page-${pathKey}`);
 
     if (
       savedVisibleArts &&
@@ -451,7 +449,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       // Restore scroll position if we're coming from a back/forward navigation
       //if (navType === "POP") {
       const savedPosition = parseInt(
-        sessionStorage.getItem(`scrollPosition-${pathKey}`),
+        localStorage.getItem(`scrollPosition-${pathKey}`),
         10
       );
 
@@ -488,12 +486,9 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       if (location.pathname !== currentPathRef.current) return;
       setPage(1);
 
-      // Save to session storage
-      sessionStorage.setItem(`page-${pathKey}`, "1");
-      sessionStorage.setItem(
-        `visibleArts-${pathKey}`,
-        JSON.stringify(imageData)
-      );
+      // Save to localStorage
+      localStorage.setItem(`page-${pathKey}`, "1");
+      localStorage.setItem(`visibleArts-${pathKey}`, JSON.stringify(imageData));
     }
 
     setStageStatus((prev) => ({ ...prev, stageInitialRenderComplete: true }));
@@ -534,8 +529,8 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
             }));
 
             const pathKey = getPathKey();
-            sessionStorage.setItem(`page-${pathKey}`, (page + 1).toString());
-            sessionStorage.setItem(
+            localStorage.setItem(`page-${pathKey}`, (page + 1).toString());
+            localStorage.setItem(
               `visibleArts-${pathKey}`,
               JSON.stringify(imageData)
             );
@@ -570,7 +565,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       const galleryHeight = entries[0].target.scrollHeight;
       if (galleryHeight > layoutHeight) {
         const pathKey = getPathKey();
-        sessionStorage.setItem(
+        localStorage.setItem(
           `layoutHeight-${pathKey}`,
           galleryHeight.toString()
         );
@@ -594,7 +589,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
     const currentPosition = window.scrollY;
     const pathKey = getPathKey();
-    sessionStorage.setItem(
+    localStorage.setItem(
       `scrollPosition-${pathKey}`,
       currentPosition.toString()
     );
@@ -616,7 +611,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
   // Handle navigation and save scroll position
   const handleClick = (event, { photo }) => {
-    sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
+    localStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
     setHasRenderedFirstImage(false);
     if (setArt) {
       setArt(null);

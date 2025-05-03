@@ -44,27 +44,27 @@ const GeneratePage = () => {
   const selectedTagBg = useColorModeValue("purple.100", "purple.700"); // Light purple background
   const selectedTagColor = useColorModeValue("purple.600", "purple.300"); // Purple text
 
-  // Load generated arts from session storage on mount
+  // Load generated arts from localStorage on mount
   useEffect(() => {
-    const storedArts = sessionStorage.getItem(storageKey);
+    const storedArts = localStorage.getItem(storageKey);
     if (storedArts) {
       try {
         setGeneratedArts(JSON.parse(storedArts));
       } catch (error) {
         console.error("Failed to parse stored generated arts:", error);
-        sessionStorage.removeItem(storageKey); // Clear invalid data
+        localStorage.removeItem(storageKey); // Clear invalid data
       }
     }
   }, []);
 
-  // Save generated arts to session storage when they change
+  // Save generated arts to localStorage when they change
   useEffect(() => {
     if (generatedArts.length > 0) {
-      sessionStorage.setItem(storageKey, JSON.stringify(generatedArts));
+      localStorage.setItem(storageKey, JSON.stringify(generatedArts));
     }
     // If generatedArts becomes empty (e.g., after clearing), remove from storage
     // else {
-    //   sessionStorage.removeItem(storageKey);
+    //   localStorage.removeItem(storageKey);
     // }
   }, [generatedArts]);
 
