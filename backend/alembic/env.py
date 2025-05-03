@@ -12,8 +12,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 try:
     from app.database import Base
     # Import all models here to ensure they're registered with Base.metadata
-    from app.models import Art, User, Category, ArtMetadata
+    # This line ONLY imports specific models, NOT ALL models
+    from app import models
     target_metadata = Base.metadata
+
+    print("--- Registered tables in Base.metadata within env.py: ---")
+    if target_metadata:
+        for table_name in target_metadata.tables:
+            print(f"- {table_name}")
+    else:
+        print("target_metadata is None!")
+    print("-------------------------------------------------------")
 except ImportError as e:
     print(f"Error importing models: {e}")
     # If models can't be imported, metadata will be empty
