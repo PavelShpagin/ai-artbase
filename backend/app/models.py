@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Table
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Table, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from .database import Base
 from datetime import datetime
@@ -27,6 +27,7 @@ class User(Base):
     following = relationship("Follow", foreign_keys="Follow.followee_id", back_populates="followee", cascade="all, delete-orphan")
     search_history = relationship("SearchHistory", back_populates="user")
     art_history = relationship("ArtHistory", back_populates="user")
+    generated_arts = relationship("GeneratedArt", back_populates="user", cascade="all, delete-orphan")
 
 class Art(Base):
     __tablename__ = "arts"
@@ -36,7 +37,7 @@ class Art(Base):
     prompt = Column(String)
     descriptive_prompt = Column(String)
     width = Column(Integer)
-    height = Column(Integer)
+    height = Column(Integer)    
     premium = Column(Boolean, default=False)
     date = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
@@ -111,3 +112,12 @@ class ProcessedLink(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     link = Column(String, unique=True, index=True)
+
+class GeneratedArt(Base):
+    __tablename__ = "generated_arts"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True, primary_key=True)
+    art_id = Column(Integer, ForeignKey("arts.id", ondelete="CASCADE"), nullable=False, index=True, primary_key=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+    user = relationship("User", back_populates="generated_arts")

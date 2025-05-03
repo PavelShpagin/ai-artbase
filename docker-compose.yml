@@ -15,7 +15,9 @@ services:
       - app-network
 
   backend:
-    image: pavelshpagin/aiartbase-backend:latest
+    # image: pavelshpagin/aiartbase-backend:latest
+    build:
+      context: ./backend
     container_name: aiartbase-backend
     ports:
       - "8000:8000"
