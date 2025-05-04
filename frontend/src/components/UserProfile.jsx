@@ -44,15 +44,15 @@ const UserProfile = () => {
 
           if (updatedArts) {
             localStorage.setItem(storageKey, JSON.stringify(updatedArts));
-            // Update visibleArts in localStorage with first batch of updatedArts
-            const visibleArtsKey = `visibleArts-profile-${id}`;
-            const visibleArtsCount = localStorage.getItem(visibleArtsKey)
-              ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
-              : 0;
-            localStorage.setItem(
-              visibleArtsKey,
-              JSON.stringify(updatedArts.slice(0, visibleArtsCount))
-            );
+            // important
+            // const visibleArtsKey = `visibleArts-profile-${id}`;
+            // const visibleArtsCount = localStorage.getItem(visibleArtsKey)
+            //   ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
+            //   : 0;
+            // localStorage.setItem(
+            //   visibleArtsKey,
+            //   JSON.stringify(updatedArts.slice(0, visibleArtsCount))
+            // );
           }
         }
       }
@@ -77,7 +77,6 @@ const UserProfile = () => {
   useEffect(() => {
     const fetchUser = async () => {
       const userData = await fetchAPI(`/users/${id}`, "GET");
-      console.log("userData", userData);
       setUser(userData);
     };
 

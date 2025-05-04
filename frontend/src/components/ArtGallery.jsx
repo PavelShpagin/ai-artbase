@@ -397,17 +397,14 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         }
 
         const pathKey = getPathKey();
-        console.log("!!!pathKey", pathKey);
         const storedArts = JSON.parse(localStorage.getItem(`arts-${pathKey}`));
-
-        console.log("!!!storedArts", storedArts);
 
         if (storedArts) {
           setArts(storedArts);
         }
 
         setLayoutHeight(
-          parseInt(localStorage.getItem(`layoutHeight-${pathKey}`) || "0", 10)
+          parseInt(sessionStorage.getItem(`layoutHeight-${pathKey}`) || "0", 10)
         );
 
         setStageStatus((prev) => ({ ...prev, stageFetchingComplete: true }));
@@ -437,19 +434,33 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     }
 
     // Check if we have saved visible arts
-    const savedVisibleArts = localStorage.getItem(`visibleArts-${pathKey}`);
-    const savedPage = localStorage.getItem(`page-${pathKey}`);
+    const savedPage = parseInt(sessionStorage.getItem(`page-${pathKey}`), 10);
+
+    //const savedVisibleArts = localStorage.getItem(`visibleArts-${pathKey}`);
+
+    const savedVisibleArts = JSON.parse(localStorage.getItem(`arts-${pathKey}`))
+      .slice(0, ITEMS_PER_PAGE * savedPage)
+      .map((img) => ({
+        id: img.id,
+        src: img.src,
+        width: parseFloat(img.width) || 1,
+        height: parseFloat(img.height) || 1,
+        alt: img.title || "Gallery image",
+        title: img.title || "Untitled",
+        prompt: img.prompt || "",
+        liked_by_user: img.liked_by_user || false,
+      }));
+
+    console.log("$$$savedVisibleArts", savedVisibleArts);
 
     if (
-      savedVisibleArts &&
+      //savedVisibleArts &&
       savedPage &&
       boxRef.current &&
       boxRef.current.offsetHeight == layoutHeight
     ) {
-      // Restore scroll position if we're coming from a back/forward navigation
-      //if (navType === "POP") {
       const savedPosition = parseInt(
-        localStorage.getItem(`scrollPosition-${pathKey}`),
+        sessionStorage.getItem(`scrollPosition-${pathKey}`),
         10
       );
 
@@ -458,17 +469,14 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       if (!isNaN(savedPosition)) {
         window.scrollTo(0, savedPosition);
       }
-      //}
-      console.log("!!!locationPathname", location.pathname);
-      console.log("!!!currentPathRef.current", currentPathRef.current);
-      //console.log("!!!savedVisibleArts", savedVisibleArts);
-      // Restore previous state
       if (location.pathname !== currentPathRef.current) return;
-      setVisibleArts(JSON.parse(savedVisibleArts));
+      setVisibleArts(savedVisibleArts);
       if (location.pathname !== currentPathRef.current) return;
-      setPage(parseInt(savedPage, 10));
-    } else if (!savedVisibleArts || !savedPage) {
-      // Create new first page
+      setPage(savedPage);
+    } else if (
+      //!savedVisibleArts ||
+      !savedPage
+    ) {
       const firstPageImages = arts.slice(0, ITEMS_PER_PAGE);
       const imageData = firstPageImages.map((img) => ({
         id: img.id,
@@ -486,9 +494,9 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       if (location.pathname !== currentPathRef.current) return;
       setPage(1);
 
-      // Save to localStorage
-      localStorage.setItem(`page-${pathKey}`, "1");
-      localStorage.setItem(`visibleArts-${pathKey}`, JSON.stringify(imageData));
+      sessionStorage.setItem(`page-${pathKey}`, "1");
+      // important
+      // sessionStorage.setItem(`visibleArts-${pathKey}`, JSON.stringify(imageData));
     }
 
     setStageStatus((prev) => ({ ...prev, stageInitialRenderComplete: true }));
@@ -516,7 +524,10 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       (entries) => {
         if (entries[0].isIntersecting && arts.length > page * ITEMS_PER_PAGE) {
           setTimeout(() => {
-            const nextPageImages = arts.slice(0, (page + 1) * ITEMS_PER_PAGE);
+            const nextPageImages = arts.slice(
+              page * ITEMS_PER_PAGE,
+              (page + 1) * ITEMS_PER_PAGE
+            );
             const imageData = nextPageImages.map((img) => ({
               id: img.id,
               src: img.src,
@@ -529,14 +540,14 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
             }));
 
             const pathKey = getPathKey();
-            localStorage.setItem(`page-${pathKey}`, (page + 1).toString());
-            localStorage.setItem(
-              `visibleArts-${pathKey}`,
-              JSON.stringify(imageData)
-            );
+            sessionStorage.setItem(`page-${pathKey}`, (page + 1).toString());
+            //localStorage.setItem(
+            //  `visibleArts-${pathKey}`,
+            //  JSON.stringify(imageData)
+            //);
 
             if (location.pathname !== currentPathRef.current) return;
-            setVisibleArts(imageData);
+            setVisibleArts((prev) => [...prev, ...imageData]);
             setPage((prev) => prev + 1);
           }, 100);
         }
@@ -565,7 +576,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
       const galleryHeight = entries[0].target.scrollHeight;
       if (galleryHeight > layoutHeight) {
         const pathKey = getPathKey();
-        localStorage.setItem(
+        sessionStorage.setItem(
           `layoutHeight-${pathKey}`,
           galleryHeight.toString()
         );
@@ -589,7 +600,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
     const currentPosition = window.scrollY;
     const pathKey = getPathKey();
-    localStorage.setItem(
+    sessionStorage.setItem(
       `scrollPosition-${pathKey}`,
       currentPosition.toString()
     );
@@ -611,7 +622,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
 
   // Handle navigation and save scroll position
   const handleClick = (event, { photo }) => {
-    localStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
+    sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
     setHasRenderedFirstImage(false);
     if (setArt) {
       setArt(null);

@@ -81,17 +81,16 @@ const ArtDetailPage = () => {
           );
 
           if (updatedArts) {
-            console.log("updatedArts", updatedArts);
             localStorage.setItem(storageKey, JSON.stringify(updatedArts));
-            // Update visibleArts in localStorage with first batch of updatedArts
-            const visibleArtsKey = `visibleArts-detail-${location.pathname}`;
-            const visibleArtsCount = localStorage.getItem(visibleArtsKey)
-              ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
-              : 0;
-            localStorage.setItem(
-              visibleArtsKey,
-              JSON.stringify(updatedArts.slice(0, visibleArtsCount))
-            );
+            // important
+            // const visibleArtsKey = `visibleArts-detail-${location.pathname}`;
+            // const visibleArtsCount = localStorage.getItem(visibleArtsKey)
+            //   ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
+            //   : 0;
+            // localStorage.setItem(
+            //   visibleArtsKey,
+            //   JSON.stringify(updatedArts.slice(0, visibleArtsCount))
+            // );
           }
         }
       }
@@ -148,7 +147,6 @@ const ArtDetailPage = () => {
         );
         setArt(response);
       } else {
-        // Check if user changed and we need to update like status
         const showcaseKey = `art-showcase-${location.pathname}`;
         const storedUserId = localStorage.getItem(`${showcaseKey}-user`);
 

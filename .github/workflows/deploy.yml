@@ -120,6 +120,18 @@ jobs:
                   - OWNER_ID=${OWNER_ID}
                   - CHROMA_HOST=chromadb
                   - CHROMA_PORT=8000
+                  - GCP_SA_TYPE=${GCP_SA_TYPE}
+                  - GCP_SA_PROJECT_ID=${GCP_SA_PROJECT_ID}
+                  - GCP_SA_PRIVATE_KEY_ID=${GCP_SA_PRIVATE_KEY_ID}
+                  - GCP_SA_PRIVATE_KEY=${GCP_SA_PRIVATE_KEY}
+                  - GCP_SA_CLIENT_EMAIL=${GCP_SA_CLIENT_EMAIL}
+                  - GCP_SA_CLIENT_ID=${GCP_SA_CLIENT_ID}
+                  - GCP_SA_AUTH_URI=${GCP_SA_AUTH_URI}
+                  - GCP_SA_TOKEN_URI=${GCP_SA_TOKEN_URI}
+                  - GCP_SA_AUTH_PROVIDER_URL=${GCP_SA_AUTH_PROVIDER_URL}
+                  - GCP_SA_CLIENT_CERT_URL=${GCP_SA_CLIENT_CERT_URL}
+                  - GCP_SA_UNIVERSE_DOMAIN=${GCP_SA_UNIVERSE_DOMAIN}
+                  - GCP_LOCATION=${GCP_LOCATION}
                 depends_on:
                   - db
                   - chromadb

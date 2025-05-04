@@ -7,9 +7,9 @@ export function useAuthRedirect() {
   const { user, setUser } = useUser();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    if (!user) {
+      sessionStorage.setItem("scrollPosition-main-", "0");
       navigate("/");
     }
-  }, [localStorage.getItem("token")]);
+  }, [user, navigate]);
 }

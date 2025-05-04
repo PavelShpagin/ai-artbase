@@ -59,7 +59,7 @@ import {
 } from "react-icons/fi";
 import { MdHistory } from "react-icons/md";
 import PurpleButton from "./Buttons"; // Make sure path is correct
-import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { useNavigate, Link as RouterLink, useLocation } from "react-router-dom";
 import SignInModal from "./SignInModal"; // Make sure path is correct
 import { useUser } from "../contexts/UserContext"; // Make sure path is correct
 import { FaSignInAlt, FaUser, FaCog } from "react-icons/fa";
@@ -73,10 +73,19 @@ import { ChevronDownIcon } from "@chakra-ui/icons";
 // --- UserMenu Component remains the same ---
 const UserMenu = ({ onSignOut }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user, setUser } = useUser();
 
   const handleSignOut = () => {
+    if (
+      location.pathname == "/liked" ||
+      location.pathname == "/profile" ||
+      location.pathname == "/analytics"
+    ) {
+      navigate("/");
+    }
+    window.location.reload();
     setUser(null);
     localStorage.setItem("token", "");
   };
@@ -159,7 +168,7 @@ const BottomNavigation = ({ onUploadClick, onGenerateClick }) => {
     setSearchQuery(""); // Clear search on home navigation
     setUiSearchQuery("");
     window.scrollTo(0, 0);
-    localStorage.setItem("scrollPosition-main-", "0");
+    sessionStorage.setItem("scrollPosition-main-", "0");
     navigate("/");
   };
 
@@ -362,7 +371,7 @@ const Header = () => {
             setSearchQuery("");
             setUiSearchQuery("");
             window.scrollTo(0, 0);
-            localStorage.setItem("scrollPosition-main-", "0");
+            sessionStorage.setItem("scrollPosition-main-", "0");
             // No need to navigate here if already handled by useEffect
           }}
           to="/"
@@ -438,6 +447,11 @@ const Header = () => {
                 e.preventDefault();
                 // The search query is already being set via onChange
                 // Any additional search submission logic would go here
+                navigate("/");
+                sessionStorage.setItem(
+                  `scrollPosition-main-${e.target.value}`,
+                  "0"
+                );
                 setSearchQuery(e.target.value);
                 setUiSearchQuery(e.target.value);
                 window.history.pushState({ state: e.target.value }, "", "/");

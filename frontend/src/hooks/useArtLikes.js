@@ -38,16 +38,29 @@ const useArtLikes = (artId, user, initialLikedStatus = false) => {
       const newLikedState = !isLiked;
 
       if (user) {
+        // important
         // Purge cache for arts-liked, visiblearts-liked, page-liked, scrollposition-liked, etc.
-        const cacheKeys = [
+        const localCacheKeys = [
           `arts-liked-${user.id}`,
-          `visibleArts-liked-${user.id}`,
-          `page-liked-${user.id}`,
-          `scrollPosition-liked-${user.id}`,
+          // `visibleArts-liked-${user.id}`,
+          // `page-liked-${user.id}`,
+          // `scrollPosition-liked-${user.id}`,
         ];
 
-        cacheKeys.forEach((key) => {
+        const sessionCacheKeys = [
+          // `arts-liked-${user.id}`,
+          // `visibleArts-liked-${user.id}`,
+          `page-liked-${user.id}`,
+          `scrollPosition-liked-${user.id}`,
+          `layoutHeight-liked-${user.id}`,
+        ];
+
+        localCacheKeys.forEach((key) => {
           localStorage.removeItem(key);
+        });
+
+        sessionCacheKeys.forEach((key) => {
+          sessionStorage.removeItem(key);
         });
       }
 
@@ -104,7 +117,8 @@ function updateAllArtInstancesInStorage(artId, userId, isLiked) {
     const key = localStorage.key(i);
     if (
       key.startsWith("arts-") ||
-      key.startsWith("visibleArts-") ||
+      // important
+      //key.startsWith("visibleArts-") ||
       key.startsWith("art-")
     ) {
       try {

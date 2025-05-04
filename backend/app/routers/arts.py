@@ -16,32 +16,65 @@ import numpy as np
 import time
 from app.scripts.enhance_prompts import generate_description
 import os
+import logging # Add logging import
+import json # Potentially needed if reading a JSON string from env var
+from google.oauth2 import service_account
+from google.auth import exceptions as auth_exceptions # For catching errors
 
-# Import Vertex AI components (assuming library is installed)
+# Configure basic logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+logger.info("Attempting to initialize Vertex AI from environment variables...")
+
 try:
+    # Read necessary fields from environment variables
+    # CAUTION: Handling the multi-line private key from an env var is tricky!
+    # It might need specific escaping or base64 decoding depending on how it was set.
+    # Assuming the private key was set correctly preserving newlines:
+    sa_info = {
+        "type": os.getenv("GCP_SA_TYPE", "service_account"),
+        "project_id": os.getenv("GCP_SA_PROJECT_ID"),
+        "private_key_id": os.getenv("GCP_SA_PRIVATE_KEY_ID"),
+        "private_key": os.getenv("GCP_SA_PRIVATE_KEY").replace('\\n', '\n'), # Example fixup
+        "client_email": os.getenv("GCP_SA_CLIENT_EMAIL"),
+        "client_id": os.getenv("GCP_SA_CLIENT_ID"),
+        "auth_uri": os.getenv("GCP_SA_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
+        "token_uri": os.getenv("GCP_SA_TOKEN_URI", "https://oauth2.googleapis.com/token"),
+        "auth_provider_x509_cert_url": os.getenv("GCP_SA_AUTH_PROVIDER_URL", "https://www.googleapis.com/oauth2/v1/certs"),
+        "client_x509_cert_url": os.getenv("GCP_SA_CLIENT_CERT_URL"),
+        "universe_domain": "googleapis.com"
+        # Add other fields if necessary
+    }
+
+    # Validate that essential fields were loaded
+    if not all([sa_info["project_id"], sa_info["private_key"], sa_info["client_email"]]):
+         raise ValueError("Missing essential GCP service account environment variables.")
+
+    # Create credentials directly from the info dictionary
+    credentials = service_account.Credentials.from_service_account_info(sa_info)
+    logger.info(f"Created service account credentials for project '{sa_info['project_id']}'.")
+
+    # Now initialize Vertex AI using these explicit credentials
     import vertexai
-    from vertexai.preview.vision_models import ImageGenerationModel, ImageGenerationResponse
-    # Replace with your Project ID and Location (Region)
-    PROJECT_ID = os.getenv("GCP_PROJECT_ID") # Make sure this env var is set
-    LOCATION = os.getenv("GCP_LOCATION", "us-central1") # Default or set via env var
+    from vertexai.preview.vision_models import ImageGenerationModel
 
-    if not PROJECT_ID:
-        print("Warning: GCP_PROJECT_ID environment variable not set. Vertex AI initialization might fail.")
-        generation_model = None
-    else:
-        # Initialize Vertex AI
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
-        # Load the model
-        generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001") # Or "imagen-3.0-generate-002" etc.
-        print(f"Vertex AI ImageGenerationModel loaded successfully from {LOCATION} for project {PROJECT_ID}")
+    PROJECT_ID = sa_info["project_id"] # Use project_id from credentials
+    LOCATION = os.getenv("GCP_LOCATION", "us-central1") # Still need location
 
-except ImportError:
-    print("Warning: google-cloud-aiplatform library not found or Vertex AI components failed to import. Image generation will not be available.")
-    print("Install it using: pip install google-cloud-aiplatform")
+    logger.info(f"Initializing Vertex AI for project '{PROJECT_ID}' in location '{LOCATION}' with explicit credentials...")
+    vertexai.init(project=PROJECT_ID, location=LOCATION, credentials=credentials)
+    logger.info("Vertex AI initialized. Loading model...")
+
+    generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
+    logger.info(f"Vertex AI ImageGenerationModel loaded successfully from {LOCATION} for project {PROJECT_ID}")
+
+
+except (auth_exceptions.GoogleAuthError, ValueError, Exception) as e:
+    logger.error(f"Error initializing Vertex AI or loading model from env vars: {e}", exc_info=True)
     generation_model = None
-except Exception as e:
-    print(f"Error initializing Vertex AI or loading model: {e}")
-    generation_model = None
+
+logger.info(f"Vertex AI initialization finished. generation_model is set: {generation_model is not None}") # Added log
 
 router = APIRouter()
 
@@ -477,53 +510,93 @@ async def get_batch_arts(
     return arts_with_likes
 
 @router.post("/generate/image/", response_model=schemas.ImageGenerationResponse)
-async def generate_image_from_prompt(request: schemas.ImageGenerationRequest):
+async def generate_image_from_prompt(
+    request: schemas.ImageGenerationRequest,
+    user_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
     if not generation_model: # Check if the Vertex AI model was initialized
         raise HTTPException(status_code=503, detail="Image generation service model is not available.")
 
     try:
         print(f"Generating image with prompt: {request.prompt}, count: {request.number_of_images}")
         # API call using the Vertex AI model instance
-        # Adapt parameters as needed based on the model's signature
         response: ImageGenerationResponse = generation_model.generate_images(
             prompt=request.prompt,
-            # aspect_ratio="1:1", # Example: Add if needed and available in schema
-            # negative_prompt="...", # Example: Add if needed and available in schema
             number_of_images=request.number_of_images,
-            # Add other parameters supported by the model and your schema as needed
         )
 
     except AttributeError as ae:
-        # Specific error if model object doesn't have 'generate_images' or response is unexpected
         print(f"AttributeError during API call: model object or response structure error. Error: {ae}")
         raise HTTPException(status_code=500, detail=f"API structure error: {ae}")
     except Exception as e:
         print(f"Error calling Vertex AI Imagen API: {str(e)}")
-        # Check for specific Vertex AI exceptions if available
         raise HTTPException(status_code=500, detail=f"Failed to generate image: {str(e)}")
 
     image_urls = []
-    # Process the response images (assuming response.images is a list)
     if not hasattr(response, 'images') or not response.images:
          print(f"Warning: No images found in the response from Vertex AI.")
          raise HTTPException(status_code=500, detail="Image generation call succeeded but returned no images.")
 
     for i, generated_image in enumerate(response.images):
         try:
-            # Access image bytes (check the exact attribute name in the SDK)
-            # It might be _image_bytes, image_bytes, or require a method call
             image_bytes = generated_image._image_bytes # Common pattern, verify with SDK docs
 
             if not image_bytes:
                 print(f"Warning: Generated image {i} has no image bytes.")
                 continue
 
-            prompt_hash = hashlib.md5(request.prompt.encode()).hexdigest()
-            unique_filename = f"generated_{prompt_hash}_{i}.png" # Assume PNG, adjust if needed
+            # --- Get image dimensions ---
+            try:
+                with Image.open(io.BytesIO(image_bytes)) as img:
+                    width, height = img.size
+            except Exception as img_err:
+                print(f"Warning: Could not read dimensions for generated image {i}. Error: {img_err}")
+                width, height = 0, 0 # Assign default or skip? Skipping might be safer.
 
-            image_url = await upload_image_bytes_to_r2(image_bytes, unique_filename, content_type='image/png')
+            prompt_hash = hashlib.md5(request.prompt.encode()).hexdigest()
+            # Use PNG for generated images, adjust if necessary
+            unique_filename = f"generated_{prompt_hash}_{i}.png"
+            content_type = 'image/png'
+
+            image_url = await upload_image_bytes_to_r2(image_bytes, unique_filename, content_type=content_type)
             image_urls.append(image_url)
             print(f"Uploaded generated image to: {image_url}")
+
+            # --- Create Art and GeneratedArt records if user_id is provided ---
+            if user_id is not None and width > 0 and height > 0: # Only proceed if user_id and valid dimensions exist
+                try:
+                    # Create Art record
+                    db_art = models.Art(
+                        width=width,
+                        height=height,
+                        prompt=request.prompt,
+                        # descriptive_prompt could potentially be generated here too
+                        src=image_url,
+                        owner_id=user_id
+                    )
+                    db.add(db_art)
+                    db.flush() # Flush to get the db_art.id before creating GeneratedArt
+
+                    # Create GeneratedArt record
+                    generated_art_link = models.GeneratedArt(
+                        user_id=user_id,
+                        art_id=db_art.id
+                    )
+                    db.add(generated_art_link)
+
+                    # Commit both records together
+                    db.commit()
+                    db.refresh(db_art) # Optional: refresh if needed later
+                    print(f"Created Art record (ID: {db_art.id}) and GeneratedArt link for user {user_id}.")
+
+                except Exception as db_err:
+                    db.rollback() # Rollback if any DB operation fails
+                    print(f"Error creating database records for generated image {i} (User: {user_id}): {db_err}")
+                    # Decide how to handle: continue without DB record? Raise error?
+                    # For now, we just log the error and continue, the URL is still added to the response.
+
+            # --- End record creation ---
 
         except AttributeError as ae:
             print(f"Warning: Generated image {i} structure unexpected or missing data (_image_bytes attribute?). Error: {ae}")
@@ -533,8 +606,55 @@ async def generate_image_from_prompt(request: schemas.ImageGenerationRequest):
             continue # Try next image if one fails
 
     if not image_urls:
-        # This happens if generation worked but all uploads failed or yielded no bytes
         raise HTTPException(status_code=500, detail="Image generation succeeded but failed to process or upload any images.")
 
+    # Return the original response schema
     return schemas.ImageGenerationResponse(image_urls=image_urls)
     
+
+@router.get("/arts/generated/{user_id}", response_model=List[schemas.Art])
+async def get_user_generated_arts(
+    user_id: int,
+    viewer_id: Optional[int] = None,
+    limit: int = 1000,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all arts that a user has generated (via GeneratedArt), sorted by creation time.
+    """
+    # Find all generated art IDs for this user
+    generated_art_ids = db.query(models.GeneratedArt.art_id).filter(models.GeneratedArt.user_id == user_id).order_by(models.GeneratedArt.created_at.desc()).limit(limit).all()
+    art_ids = [art_id for (art_id,) in generated_art_ids]
+
+    if not art_ids:
+        return []
+
+    # Get all the arts that the user generated, along with viewer's like status
+    if viewer_id is not None:
+        arts_query = db.query(
+            models.Art,
+            exists().where(
+                and_(
+                    models.Like.art_id == models.Art.id,
+                    models.Like.user_id == viewer_id
+                )
+            ).label('liked_by_user')
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id.desc()).limit(limit)
+    else:
+        arts_query = db.query(
+            models.Art,
+            literal(False).label('liked_by_user')
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id.desc()).limit(limit)
+
+    arts_result = arts_query.all()
+    
+    # Include the "liked_by_user" flag in the response
+    arts_with_likes = [
+        {
+            **art.__dict__,
+            "liked_by_user": liked_by_user
+        }
+        for art, liked_by_user in arts_result
+    ]
+
+    return arts_with_likes

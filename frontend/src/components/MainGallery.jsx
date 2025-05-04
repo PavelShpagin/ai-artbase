@@ -68,26 +68,16 @@ const MainGallery = () => {
           if (updatedArts) {
             // Update localStorage with new data
             localStorage.setItem(storageKey, JSON.stringify(updatedArts));
-            console.log("updatedArts", updatedArts);
 
-            // Update visibleArts in localStorage with first batch of updatedArts
-            const visibleArtsKey = `visibleArts-main-${searchQuery}`;
-            const visibleArtsCount = localStorage.getItem(visibleArtsKey)
-              ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
-              : 0;
-            localStorage.setItem(
-              visibleArtsKey,
-              JSON.stringify(updatedArts.slice(0, visibleArtsCount))
-            );
-
-            // // Update individual art like statuses
-            // updatedArts.forEach((art) => {
-            //   const likeKey = `art-like-${art.id}-${user?.id || "guest"}`;
-            //   localStorage.setItem(
-            //     likeKey,
-            //     JSON.stringify(art.liked_by_user)
-            //   );
-            // });
+            // important
+            // const visibleArtsKey = `visibleArts-main-${searchQuery}`;
+            // const visibleArtsCount = localStorage.getItem(visibleArtsKey)
+            //   ? JSON.parse(localStorage.getItem(visibleArtsKey)).length
+            //   : 0;
+            // localStorage.setItem(
+            //   visibleArtsKey,
+            //   JSON.stringify(updatedArts.slice(0, visibleArtsCount))
+            // );
           }
         }
       }
