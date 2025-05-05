@@ -30,6 +30,8 @@ class ArtBase(BaseModel):
     src: str
     owner_id: int
     num_likes: int = 0
+    is_generated: bool = False
+    is_public: bool = True
 
 class ArtCreate(ArtBase):
     pass

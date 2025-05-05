@@ -129,7 +129,9 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
         prompt=prompt, 
         descriptive_prompt=descriptive_prompt, 
         src=image_url, 
-        owner_id=owner_id
+        owner_id=owner_id,
+        is_generated=False,
+        is_public=True
     )
     
     try:
@@ -169,12 +171,14 @@ async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Sess
             exists().where(
                 and_(
                     models.Like.art_id == models.Art.id,
-                    models.Like.user_id == viewer_id
+                    models.Like.user_id == viewer_id,
                 )
             ).label('liked_by_user')
         ).join(
             models.ArtMetadata, 
             models.ArtMetadata.art_id == models.Art.id
+        ).filter(
+            models.Art.is_public == True
         ).filter(
             models.ArtMetadata.upvotes >= 25
         ).offset(time_offset).limit(limit).all()
@@ -187,7 +191,9 @@ async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Sess
             models.ArtMetadata, 
             models.ArtMetadata.art_id == models.Art.id
         ).filter(
-            models.ArtMetadata.upvotes >= 20
+            models.Art.is_public == True
+        ).filter(
+            models.ArtMetadata.upvotes >= 25
         ).offset(time_offset).limit(limit).all()
 
     # Transform the results into the expected format
@@ -221,13 +227,13 @@ async def search_arts(query: str, user_id: Optional[int] = None, db: Session = D
                     models.Like.user_id == user_id
                 )
             ).label('liked_by_user')
-        ).filter(models.Art.id.in_(filtered_ids)).order_by(order_case).all()
+        ).filter(models.Art.id.in_(filtered_ids)).filter(models.Art.is_public == True).order_by(order_case).all()
     else:
         # Query arts without liked_by_user information
         arts = db.query(
             models.Art,
             literal(False).label('liked_by_user')
-        ).filter(models.Art.id.in_(filtered_ids)).order_by(order_case).all()
+        ).filter(models.Art.id.in_(filtered_ids)).filter(models.Art.is_public == True).order_by(order_case).all()
     
     # Transform the results into the expected format
     arts_with_likes = [
@@ -248,7 +254,7 @@ async def read_art_dates(db: Session = Depends(get_db)):
 
 @router.get("/arts/{user_id}", response_model=List[schemas.Art])
 def get_user_arts(user_id: int, viewer_id: Optional[int] = None, limit: int = 1000, db: Session = Depends(get_db)):
-    arts = db.query(models.Art).filter(models.Art.owner_id == user_id).order_by(models.Art.date.desc()).limit(limit).all()
+    arts = db.query(models.Art).filter(models.Art.owner_id == user_id).filter(models.Art.is_public == True).order_by(models.Art.date.desc()).limit(limit).all()
     # Query arts with liked_by_user information in a single query
     if viewer_id is not None:
         arts_with_likes_data = db.query(
@@ -299,12 +305,12 @@ async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Ses
                         models.Like.user_id == viewer_id
                     )
                 ).label('liked_by_user')
-            ).filter(models.Art.id != art_id).limit(20)
+            ).filter(models.Art.id != art_id).filter(models.Art.is_public == True).limit(20)
         else:
             arts_query = db.query(
                 models.Art,
                 literal(False).label('liked_by_user')
-            ).filter(models.Art.id != art_id).limit(20)
+            ).filter(models.Art.id != art_id).filter(models.Art.is_public == True).limit(20)
             
         arts_result = arts_query.all()
         
@@ -335,12 +341,12 @@ async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Ses
                         models.Like.user_id == viewer_id
                     )
                 ).label('liked_by_user')
-            ).filter(models.Art.id.in_(similar_ids))
+            ).filter(models.Art.id.in_(similar_ids)).filter(models.Art.is_public == True)
         else:
             arts_query = db.query(
                 models.Art,
                 literal(False).label('liked_by_user')
-            ).filter(models.Art.id.in_(similar_ids))
+            ).filter(models.Art.id.in_(similar_ids)).filter(models.Art.is_public == True)
             
         # Preserve ChromaDB order if needed (requires adjusting the query)
         # For simplicity, current implementation doesn't preserve ChromaDB order
@@ -364,12 +370,12 @@ async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Ses
                         models.Like.user_id == viewer_id
                     )
                 ).label('liked_by_user')
-            ).filter(models.Art.id != art_id).limit(20)
+            ).filter(models.Art.id != art_id).filter(models.Art.is_public == True).limit(20)
         else:
             arts_query = db.query(
                 models.Art,
                 literal(False).label('liked_by_user')
-            ).filter(models.Art.id != art_id).limit(20)
+            ).filter(models.Art.id != art_id).filter(models.Art.is_public == True).limit(20)
             
         arts_result = arts_query.all()
         
@@ -564,37 +570,26 @@ async def generate_image_from_prompt(
             print(f"Uploaded generated image to: {image_url}")
 
             # --- Create Art and GeneratedArt records if user_id is provided ---
-            if user_id is not None and width > 0 and height > 0: # Only proceed if user_id and valid dimensions exist
+            if user_id is not None and width > 0 and height > 0:
                 try:
-                    # Create Art record
+                    # Create Art record with is_generated and is_public
                     db_art = models.Art(
                         width=width,
                         height=height,
                         prompt=request.prompt,
-                        # descriptive_prompt could potentially be generated here too
                         src=image_url,
-                        owner_id=user_id
+                        owner_id=user_id,
+                        is_generated=True,   # <--- Set to True
+                        is_public=False      # <--- Set to False
                     )
                     db.add(db_art)
-                    db.flush() # Flush to get the db_art.id before creating GeneratedArt
-
-                    # Create GeneratedArt record
-                    generated_art_link = models.GeneratedArt(
-                        user_id=user_id,
-                        art_id=db_art.id
-                    )
-                    db.add(generated_art_link)
-
-                    # Commit both records together
                     db.commit()
-                    db.refresh(db_art) # Optional: refresh if needed later
-                    print(f"Created Art record (ID: {db_art.id}) and GeneratedArt link for user {user_id}.")
-
+                    db.refresh(db_art)
+                    print(f"Created Art record (ID: {db_art.id}) for user {user_id}.")
                 except Exception as db_err:
-                    db.rollback() # Rollback if any DB operation fails
-                    print(f"Error creating database records for generated image {i} (User: {user_id}): {db_err}")
-                    # Decide how to handle: continue without DB record? Raise error?
-                    # For now, we just log the error and continue, the URL is still added to the response.
+                    db.rollback()
+                    print(f"Error creating database record for generated image {i} (User: {user_id}): {db_err}")
+                    # Continue, but do not add to generated_arts (which is now removed)
 
             # --- End record creation ---
 
@@ -620,18 +615,23 @@ async def get_user_generated_arts(
     db: Session = Depends(get_db)
 ):
     """
-    Get all arts that a user has generated (via GeneratedArt), sorted by creation time.
+    Get all arts that a user has generated (from the arts table), sorted by creation time.
     """
-    # Find all generated art IDs for this user
-    generated_art_ids = db.query(models.GeneratedArt.art_id).filter(models.GeneratedArt.user_id == user_id).order_by(models.GeneratedArt.created_at.desc()).limit(limit).all()
-    art_ids = [art_id for (art_id,) in generated_art_ids]
+    # Query all generated arts for this user
+    arts_query_base = db.query(models.Art).filter(
+        models.Art.owner_id == user_id,
+        models.Art.is_generated == True
+    ).order_by(models.Art.date.desc()).limit(limit)
+
+    arts = arts_query_base.all()
+    art_ids = [art.id for art in arts]
 
     if not art_ids:
         return []
 
     # Get all the arts that the user generated, along with viewer's like status
     if viewer_id is not None:
-        arts_query = db.query(
+        arts_with_likes_data = db.query(
             models.Art,
             exists().where(
                 and_(
@@ -639,22 +639,23 @@ async def get_user_generated_arts(
                     models.Like.user_id == viewer_id
                 )
             ).label('liked_by_user')
-        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id.desc()).limit(limit)
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.date.desc()).all()
+        
+        arts_with_likes = [
+            {
+                **art.__dict__,
+                "liked_by_user": liked_by_user
+            }
+            for art, liked_by_user in arts_with_likes_data
+        ]
     else:
-        arts_query = db.query(
-            models.Art,
-            literal(False).label('liked_by_user')
-        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id.desc()).limit(limit)
-
-    arts_result = arts_query.all()
-    
-    # Include the "liked_by_user" flag in the response
-    arts_with_likes = [
-        {
-            **art.__dict__,
-            "liked_by_user": liked_by_user
-        }
-        for art, liked_by_user in arts_result
-    ]
+        # Query arts without liked_by_user information
+        arts_with_likes = [
+            {
+                **art.__dict__,
+                "liked_by_user": False
+            }
+            for art in arts
+        ]
 
     return arts_with_likes

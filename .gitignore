@@ -53,3 +53,6 @@ backend/postgres_data/*
 backend/postgres_data
 
 backend/gcp-key.json
+
+backend/postgres_data/*
+backend/postgres_data

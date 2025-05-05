@@ -9,7 +9,7 @@ services:
       - POSTGRES_PASSWORD=pirate228
       - POSTGRES_DB=Ai_ArtBase
     volumes:
-      - ./backend/postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
       - app-network
@@ -74,5 +74,6 @@ services:
 networks:
   app-network:
     driver: bridge
-# volumes:
-#    postgres_data:
+
+volumes:
+  pgdata:

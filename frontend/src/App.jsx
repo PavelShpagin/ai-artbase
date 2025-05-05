@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext } from "react";
+import React, { createContext, useState, useContext, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ChakraProvider, Box, ColorModeScript } from "@chakra-ui/react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
@@ -35,7 +35,59 @@ export const useSearchQuery = () => useContext(SearchQueryContext);
 // Create QueryClient outside component to avoid recreating on each render
 const queryClient = new QueryClient();
 
+function clearArtLocalStorage() {
+  // Remove all keys starting with "arts-" or "art-"
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith("arts-") || key.startsWith("art-")) {
+      localStorage.removeItem(key);
+    }
+  });
+}
+
+function useTabCounter() {
+  useEffect(() => {
+    // Increment on open
+    const tabKey = "openTabCount";
+    let count = parseInt(localStorage.getItem(tabKey) || "0", 10);
+    localStorage.setItem(tabKey, String(count + 1));
+
+    // Listen for storage changes from other tabs
+    const handleStorage = (e) => {
+      if (e.key === tabKey && parseInt(e.newValue, 10) === 0) {
+        clearArtLocalStorage();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    // On close, decrement
+    const handleUnload = () => {
+      let count = parseInt(localStorage.getItem(tabKey) || "1", 10);
+      count = Math.max(0, count - 1);
+      localStorage.setItem(tabKey, String(count));
+      if (count === 0) {
+        clearArtLocalStorage();
+      }
+    };
+    window.addEventListener("beforeunload", handleUnload);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("beforeunload", handleUnload);
+      // Also decrement if React unmounts (shouldn't happen, but for safety)
+      let count = parseInt(localStorage.getItem(tabKey) || "1", 10);
+      count = Math.max(0, count - 1);
+      localStorage.setItem(tabKey, String(count));
+      if (count === 0) {
+        clearArtLocalStorage();
+      }
+    };
+  }, []);
+}
+
 function App() {
+  useTabCounter();
+
   return (
     <QueryClientProvider client={queryClient}>
       <GoogleOAuthProvider clientId={import.meta.env.VITE_CLIENT_ID}>
