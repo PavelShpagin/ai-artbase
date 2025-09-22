@@ -78,6 +78,17 @@ jobs:
             OWNER_ID=${{ secrets.OWNER_ID }}
             GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
             GCP_LOCATION=${{ secrets.GCP_LOCATION }}
+            GCP_SA_TYPE=${{ secrets.GCP_SA_TYPE }}
+            GCP_SA_PROJECT_ID=${{ secrets.GCP_SA_PROJECT_ID }}
+            GCP_SA_PRIVATE_KEY_ID=${{ secrets.GCP_SA_PRIVATE_KEY_ID }}
+            GCP_SA_PRIVATE_KEY=${{ secrets.GCP_SA_PRIVATE_KEY }}
+            GCP_SA_CLIENT_EMAIL=${{ secrets.GCP_SA_CLIENT_EMAIL }}
+            GCP_SA_CLIENT_ID=${{ secrets.GCP_SA_CLIENT_ID }}
+            GCP_SA_AUTH_URI=${{ secrets.GCP_SA_AUTH_URI }}
+            GCP_SA_TOKEN_URI=${{ secrets.GCP_SA_TOKEN_URI }}
+            GCP_SA_AUTH_PROVIDER_URL=${{ secrets.GCP_SA_AUTH_PROVIDER_URL }}
+            GCP_SA_CLIENT_CERT_URL=${{ secrets.GCP_SA_CLIENT_CERT_URL }}
+            GCP_SA_UNIVERSE_DOMAIN=${{ secrets.GCP_SA_UNIVERSE_DOMAIN }}
             EOF
 
             # Create docker-compose file
@@ -132,6 +143,7 @@ jobs:
                   - GCP_SA_CLIENT_CERT_URL=${GCP_SA_CLIENT_CERT_URL}
                   - GCP_SA_UNIVERSE_DOMAIN=${GCP_SA_UNIVERSE_DOMAIN}
                   - GCP_LOCATION=${GCP_LOCATION}
+                  - GCP_PROJECT_ID=${GCP_PROJECT_ID}
                 depends_on:
                   - db
                   - chromadb
