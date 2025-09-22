@@ -9,6 +9,7 @@ import sys
 # Configure for production-ready local development
 os.environ['APP_ENV'] = 'development'  # Use local mode for now
 os.environ['DATABASE_URL'] = 'postgresql://postgres:pirate228@92.242.187.70:5432/Ai_ArtBase'
+os.environ['GCP_LOCATION'] = 'us-central1'  # Most reliable region for Imagen3 - fallback from europe-west1
 
 # Remove ChromaDB disable flag to allow fallback logic
 if 'DISABLE_CHROMA' in os.environ:

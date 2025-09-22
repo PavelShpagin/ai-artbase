@@ -19,7 +19,7 @@ class User(UserCreate):
     role: str = "user"
     
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # Art
 class ArtBase(BaseModel):
@@ -43,7 +43,7 @@ class Art(ArtBase):
     liked_by_user: bool = False
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # Like
 class LikeBase(BaseModel):
@@ -51,7 +51,7 @@ class LikeBase(BaseModel):
     art_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # Follow
 class FollowBase(BaseModel):
@@ -59,7 +59,7 @@ class FollowBase(BaseModel):
     followee_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # SearchHistory
 class SearchHistoryBase(BaseModel):
@@ -74,7 +74,7 @@ class SearchHistory(SearchHistoryBase):
     user_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # ArtHistory
 class ArtHistoryBase(BaseModel):
@@ -89,7 +89,7 @@ class ArtHistory(ArtHistoryBase):
     user_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # additional
 class CategoryCount(BaseModel):
@@ -104,7 +104,7 @@ class ArtMetadataSchema(BaseModel):
     upvotes: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class ArtMetadataCreate(BaseModel):
     art_id: int
@@ -120,7 +120,7 @@ class ProcessedLinkResponse(BaseModel):
     link: str
     
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class Category(BaseModel):
     id: int
