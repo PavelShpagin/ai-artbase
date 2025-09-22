@@ -71,8 +71,16 @@ try:
 
 
 except (auth_exceptions.GoogleAuthError, ValueError, Exception) as e:
-    logger.error(f"Error initializing Vertex AI or loading model from env vars: {e}", exc_info=True)
-    generation_model = None
+    logger.error(f"Error initializing Vertex AI or loading model from env vars: {e}")
+    logger.info("Falling back to mock image generation for development")
+    try:
+        import sys
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        from mock_image_generation import MockImageGenerationModel
+        generation_model = MockImageGenerationModel.from_pretrained("mock-imagen-3.0")
+    except Exception as mock_error:
+        logger.error(f"Failed to initialize mock generation: {mock_error}")
+        generation_model = None
 
 logger.info(f"Vertex AI initialization finished. generation_model is set: {generation_model is not None}") # Added log
 
@@ -140,14 +148,17 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
         db.refresh(db_art)
 
         # Add to ChromaDB
-        collection_prompts.add(
-            documents=[descriptive_prompt],
-            ids=[str(db_art.id)]
-        )
+        if collection_prompts:
+            collection_prompts.add(
+                documents=[descriptive_prompt],
+                ids=[str(db_art.id)]
+            )
 
         # Add categories
-        results = collection_categories.query(query_texts=[prompt], include=["distances", "documents"])
-        filtered_ids = filter_chroma(results, 0.35)
+        filtered_ids = []
+        if collection_categories:
+            results = collection_categories.query(query_texts=[prompt], include=["distances", "documents"])
+            filtered_ids = filter_chroma(results, 0.35)
 
         if filtered_ids:
             associations = [{"art_id": db_art.id, "category_id": category_id} for category_id in filtered_ids]
@@ -206,51 +217,64 @@ async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Sess
     ]
     return arts_with_likes
 
-@router.get("/search/", response_model=List[schemas.Art])
-async def search_arts(query: str, user_id: Optional[int] = None, db: Session = Depends(get_db)):
-    results = collection_prompts.query(query_texts=[query], include=["distances"], n_results=100)  
-    filtered_ids = results['ids'][0]
-    
-    if not filtered_ids:
-        return []
-    
-    # Create a case statement for ordering results according to ChromaDB ranking
-    order_case = case({id_: index for index, id_ in enumerate(filtered_ids)}, value=models.Art.id)
-    
-    if user_id is not None:
-    # Query arts with liked_by_user information in a single query
-        arts = db.query(
-            models.Art,
-            exists().where(
-                and_(
-                    models.Like.art_id == models.Art.id,
-                    models.Like.user_id == user_id
-                )
-            ).label('liked_by_user')
-        ).filter(models.Art.id.in_(filtered_ids)).filter(models.Art.is_public == True).order_by(order_case).all()
-    else:
-        # Query arts without liked_by_user information
-        arts = db.query(
-            models.Art,
-            literal(False).label('liked_by_user')
-        ).filter(models.Art.id.in_(filtered_ids)).filter(models.Art.is_public == True).order_by(order_case).all()
-    
-    # Transform the results into the expected format
-    arts_with_likes = [
-        {
-            **art.__dict__,
-            "liked_by_user": liked_by_user if user_id is not None else False
-        }
-        for art, liked_by_user in arts
-    ]
-    
-    return arts_with_likes
-
 @router.get("/arts/dates/", response_model=List[str])
 async def read_art_dates(db: Session = Depends(get_db)):
     art_dates = db.query(models.Art.date).all()
     dates = [art_date[0].strftime("%Y-%m-%d %H:%M:%S") for art_date in art_dates]
     return dates
+
+@router.get("/arts/search/", response_model=List[schemas.Art])
+async def search_arts(query: str, user_id: Optional[int] = None, db: Session = Depends(get_db)):
+    # Check if ChromaDB is available
+    if not collection_prompts:
+        try:
+            # Fallback to basic text search if ChromaDB is not available
+            arts = db.query(models.Art).filter(
+                models.Art.prompt.ilike(f'%{query}%')
+            ).filter(models.Art.is_public == True).limit(100).all()
+            return [schemas.Art.model_validate(art) for art in arts]
+        except Exception as e:
+            print(f"Database error in fallback search: {e}")
+            return []
+    
+    try:
+        results = collection_prompts.query(query_texts=[query], include=["distances"], n_results=100)  
+        filtered_ids = results['ids'][0]
+        
+        if not filtered_ids:
+            return []
+        
+        # Create a case statement for ordering results according to ChromaDB ranking
+        order_case = case({id_: index for index, id_ in enumerate(filtered_ids)}, value=models.Art.id)
+        
+        if user_id is not None:
+            # Query arts with liked_by_user information in a single query
+            arts_with_likes_data = db.query(
+                models.Art,
+                case((models.Like.user_id == user_id, True), else_=False).label('liked_by_user')
+            ).outerjoin(
+                models.Like, and_(models.Like.art_id == models.Art.id, models.Like.user_id == user_id)
+            ).filter(
+                models.Art.id.in_(filtered_ids)
+            ).filter(models.Art.is_public == True).order_by(order_case).all()
+            
+            return [
+                {**art.__dict__, "liked_by_user": liked_by_user}
+                for art, liked_by_user in arts_with_likes_data
+            ]
+        else:
+            # Query without liked_by_user information
+            arts = db.query(models.Art).filter(models.Art.id.in_(filtered_ids)).filter(models.Art.is_public == True).order_by(order_case).all()
+            return [schemas.Art.model_validate(art) for art in arts]
+    except Exception as e:
+        print(f"Database error in ChromaDB search: {e}")
+        # Fallback to basic text search on database error
+        try:
+            arts = db.query(models.Art).filter(models.Art.prompt.contains(query)).limit(50).all()
+            return [schemas.Art.model_validate(art) for art in arts]
+        except Exception as fallback_error:
+            print(f"Fallback search also failed: {fallback_error}")
+            return []
 
 @router.get("/arts/{user_id}", response_model=List[schemas.Art])
 def get_user_arts(user_id: int, viewer_id: Optional[int] = None, limit: int = 1000, db: Session = Depends(get_db)):
@@ -292,7 +316,7 @@ async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Ses
     if not source_art:
         raise HTTPException(status_code=404, detail="Art not found")
     
-    prompt = source_art.descriptive_prompt
+    prompt = source_art.descriptive_prompt or source_art.prompt
     
     if not prompt:
         # If no prompt, return random arts with like status
@@ -320,6 +344,62 @@ async def get_similar_arts(art_id: int, viewer_id: Optional[int] = None, db: Ses
         ]
 
     try:
+        if not collection_prompts:
+            # Fallback to keyword-based similarity if ChromaDB is not available
+            prompt_words = prompt.lower().split() if prompt else []
+            similar_arts = []
+            
+            if prompt_words:
+                # Find arts with similar keywords
+                for word in prompt_words[:10]:  # Use up to 10 keywords
+                    if len(word) > 3:  # Skip short words
+                        word_arts = db.query(models.Art).filter(
+                            models.Art.prompt.ilike(f'%{word}%')
+                        ).filter(models.Art.id != art_id).filter(
+                            models.Art.is_public == True
+                        ).limit(5).all()  # Get 5 per keyword
+                        similar_arts.extend(word_arts)
+                
+                # Remove duplicates while preserving order
+                seen_ids = set()
+                unique_arts = []
+                for art in similar_arts:
+                    if art.id not in seen_ids:
+                        seen_ids.add(art.id)
+                        unique_arts.append(art)
+                
+                # Take first 20 unique arts
+                similar_arts = unique_arts[:20]
+            
+            # If we don't have enough similar arts, fill with random
+            if len(similar_arts) < 20:
+                remaining_count = 20 - len(similar_arts)
+                existing_ids = [art.id for art in similar_arts] + [art_id]
+                
+                random_arts = db.query(models.Art).filter(
+                    models.Art.id.notin_(existing_ids)
+                ).filter(models.Art.is_public == True).order_by(func.random()).limit(remaining_count).all()
+                similar_arts.extend(random_arts)
+            
+            # Add liked_by_user information
+            if viewer_id is not None:
+                art_ids = [art.id for art in similar_arts]
+                likes_query = db.query(models.Like.art_id).filter(
+                    models.Like.art_id.in_(art_ids),
+                    models.Like.user_id == viewer_id
+                ).all()
+                liked_art_ids = {like.art_id for like in likes_query}
+                
+                return [
+                    {**art.__dict__, "liked_by_user": art.id in liked_art_ids}
+                    for art in similar_arts
+                ]
+            else:
+                return [
+                    {**art.__dict__, "liked_by_user": False}
+                    for art in similar_arts
+                ]
+            
         results = collection_prompts.query(
             query_texts=[prompt],
             n_results=50,
@@ -458,13 +538,13 @@ async def get_user_liked_arts(user_id: int, viewer_id: Optional[int] = None, lim
                     models.Like.user_id == viewer_id
                 )
             ).label('liked_by_user')
-        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit) # Removed redundant outer join
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.date.desc()).limit(limit) # Removed redundant outer join
     else:
         # If no viewer_id, liked_by_user is always False
         arts_query = db.query(
             models.Art,
              literal(False).label('liked_by_user') # Simpler: If no viewer_id, they haven't liked it
-        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.id).limit(limit)
+        ).filter(models.Art.id.in_(art_ids)).order_by(models.Art.date.desc()).limit(limit)
          
     arts_result = arts_query.all()
 
@@ -515,21 +595,25 @@ async def get_batch_arts(
     
     return arts_with_likes
 
-@router.post("/generate/image/", response_model=schemas.ImageGenerationResponse)
+@router.post("/generate/image/", response_model=List[schemas.Art])
 async def generate_image_from_prompt(
-    request: schemas.ImageGenerationRequest,
-    user_id: Optional[int] = Query(None),
+    prompt: str,
+    user_id: Optional[int] = Query(4),  # Default to 4 if not provided
+    number_of_images: Optional[int] = Query(1, ge=1, le=4),  # Default 1, min 1, max 4
     db: Session = Depends(get_db)
 ):
+    if user_id is None:
+        user_id = 4
+        
     if not generation_model: # Check if the Vertex AI model was initialized
         raise HTTPException(status_code=503, detail="Image generation service model is not available.")
 
     try:
-        print(f"Generating image with prompt: {request.prompt}, count: {request.number_of_images}")
+        print(f"Generating image with prompt: {prompt}, count: {number_of_images}")
         # API call using the Vertex AI model instance
-        response: ImageGenerationResponse = generation_model.generate_images(
-            prompt=request.prompt,
-            number_of_images=request.number_of_images,
+        response = generation_model.generate_images(
+            prompt=prompt,
+            number_of_images=number_of_images,  # Use the query parameter instead of request field
         )
 
     except AttributeError as ae:
@@ -539,7 +623,7 @@ async def generate_image_from_prompt(
         print(f"Error calling Vertex AI Imagen API: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate image: {str(e)}")
 
-    image_urls = []
+    created_arts = []
     if not hasattr(response, 'images') or not response.images:
          print(f"Warning: No images found in the response from Vertex AI.")
          raise HTTPException(status_code=500, detail="Image generation call succeeded but returned no images.")
@@ -560,13 +644,12 @@ async def generate_image_from_prompt(
                 print(f"Warning: Could not read dimensions for generated image {i}. Error: {img_err}")
                 width, height = 0, 0 # Assign default or skip? Skipping might be safer.
 
-            prompt_hash = hashlib.md5(request.prompt.encode()).hexdigest()
+            prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
             # Use PNG for generated images, adjust if necessary
             unique_filename = f"generated_{prompt_hash}_{i}.png"
             content_type = 'image/png'
 
             image_url = await upload_image_bytes_to_r2(image_bytes, unique_filename, content_type=content_type)
-            image_urls.append(image_url)
             print(f"Uploaded generated image to: {image_url}")
 
             # --- Create Art and GeneratedArt records if user_id is provided ---
@@ -576,7 +659,7 @@ async def generate_image_from_prompt(
                     db_art = models.Art(
                         width=width,
                         height=height,
-                        prompt=request.prompt,
+                        prompt=prompt,
                         src=image_url,
                         owner_id=user_id,
                         is_generated=True,   # <--- Set to True
@@ -586,6 +669,7 @@ async def generate_image_from_prompt(
                     db.commit()
                     db.refresh(db_art)
                     print(f"Created Art record (ID: {db_art.id}) for user {user_id}.")
+                    created_arts.append(db_art)
                 except Exception as db_err:
                     db.rollback()
                     print(f"Error creating database record for generated image {i} (User: {user_id}): {db_err}")
@@ -600,11 +684,11 @@ async def generate_image_from_prompt(
             print(f"Failed to process or upload generated image {i} to R2: {str(e)}")
             continue # Try next image if one fails
 
-    if not image_urls:
-        raise HTTPException(status_code=500, detail="Image generation succeeded but failed to process or upload any images.")
+    if not created_arts:
+        raise HTTPException(status_code=500, detail="Image generation succeeded but failed to create any art records.")
 
-    # Return the original response schema
-    return schemas.ImageGenerationResponse(image_urls=image_urls)
+    # Return the created Art objects instead of just URLs
+    return created_arts
     
 
 @router.get("/arts/generated/{user_id}", response_model=List[schemas.Art])
@@ -659,3 +743,25 @@ async def get_user_generated_arts(
         ]
 
     return arts_with_likes
+
+@router.post("/set-public/{art_id}")
+def set_art_public(
+    art_id: int,
+    is_public: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Set the public status of an art by art_id.
+    """
+    # Find the art by ID
+    art = db.query(models.Art).filter(models.Art.id == art_id).first()
+    
+    # Check if art exists
+    if not art:
+        raise HTTPException(status_code=404, detail="Art not found")
+    
+    # Update the public status
+    art.is_public = is_public
+    db.commit()
+    
+    return {"success": True, "message": f"Art public status set to {is_public}", "art_id": art_id}

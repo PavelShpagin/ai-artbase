@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import axios from "axios";
 import {
   Modal,
@@ -20,8 +20,13 @@ import {
 import PurpleButton from "./Buttons";
 import fetchAPI from "../services/api";
 import { useUser } from "../contexts/UserContext";
+import { useToast } from "@chakra-ui/react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const ImageUploadModal = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const imageRef = useRef(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedFile, setSelectedFile] = useState(null);
   const [prompt, setPrompt] = useState("");
@@ -30,6 +35,7 @@ const ImageUploadModal = () => {
   const [imageWidth, setImageWidth] = useState("auto");
   const [isPublishing, setIsPublishing] = useState(false);
   const { user, setUser } = useUser();
+  const toast = useToast();
 
   const inputBg = useColorModeValue("gray.100", "gray.700");
   const inputHoverBg = useColorModeValue("gray.200", "gray.600");
@@ -56,7 +62,7 @@ const ImageUploadModal = () => {
     const formData = new FormData();
     formData.append("prompt", prompt);
     formData.append("image", selectedFile);
-    formData.append("owner_id", user.id);
+    formData.append("owner_id", user ? user.id : 4);
 
     try {
       await fetchAPI(`/arts/`, "POST", formData);
@@ -69,6 +75,63 @@ const ImageUploadModal = () => {
       console.error("Failed to upload image:", error);
     } finally {
       setIsPublishing(false);
+
+      // Update localStorage for profile arts
+      if (user) {
+        const profileStorageKey = `arts-profile-${user?.id}`;
+        const profileArts = JSON.parse(
+          localStorage.getItem(profileStorageKey) || "[]"
+        );
+
+        // Create a new art object with the uploaded image details
+        const newArt = {
+          id: Date.now(), // Temporary ID until we get the real one from the server
+          prompt: prompt,
+          src: imagePreview,
+          width: imageRef.current?.naturalWidth || 800,
+          height: imageRef.current?.naturalHeight || 600,
+          date: new Date().toISOString(),
+          owner_id: user?.id || 4,
+          is_public: false, // Default to private
+          liked_by_user: false,
+        };
+
+        // Add the new art to the beginning of the profile arts array
+        profileArts.unshift(newArt);
+
+        // Update localStorage
+        localStorage.setItem(profileStorageKey, JSON.stringify(profileArts));
+
+        // Clear other cached storage to force reload
+        const sessionCacheKeys = [
+          `page-profile-${user.id}`,
+          `scrollPosition-profile-${user.id}`,
+          `layoutHeight-profile-${user.id}`,
+        ];
+
+        sessionCacheKeys.forEach((key) => {
+          sessionStorage.removeItem(key);
+        });
+
+        // Check if we're on the user's profile page and refresh if needed
+        const isOnProfilePage = location.pathname === `/profile/${user.id}`;
+        if (isOnProfilePage) {
+          // Use a slight delay to allow the modal to close smoothly
+          setTimeout(() => {
+            window.location.reload();
+          }, 300);
+        }
+      }
+
+      // Show success toast
+      toast({
+        title: "Image uploaded!",
+        description: "Your image has been uploaded successfully.",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+        position: "top",
+      });
     }
   };
 
@@ -90,7 +153,12 @@ const ImageUploadModal = () => {
       />
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
-        <ModalContent maxWidth={imageWidth} bg={modalBg} borderRadius="xl">
+        <ModalContent
+          maxWidth={imageWidth}
+          bg={modalBg}
+          borderRadius="xl"
+          mx={10}
+        >
           <ModalHeader fontWeight={"bold"} borderTopRadius="xl">
             Upload AI Art
           </ModalHeader>
@@ -98,6 +166,7 @@ const ImageUploadModal = () => {
           <ModalBody>
             <Flex direction="column" align="center">
               <Image
+                ref={imageRef}
                 onLoad={handleImageLoad}
                 src={imagePreview}
                 maxH="600px"

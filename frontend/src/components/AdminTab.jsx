@@ -29,7 +29,7 @@ const AdminTab = () => {
     const fetchUsers = async () => {
       try {
         const response = await fetchAPI("/users");
-        console.log(response);
+        //console.log(response);
         setUsersData(response);
       } catch (error) {
         console.error("Failed to fetch arts:", error);

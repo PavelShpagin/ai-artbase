@@ -19,6 +19,14 @@ app = FastAPI()
 
 origins = [
     "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:5177",
+    "http://localhost:5178",
+    "http://localhost:5179",
+    "http://localhost:5180",
+    "http://localhost:5181",
     "https://aiartbase.com", #production domain
     # "*",
 ]
@@ -55,8 +63,8 @@ async def get_chroma_stats():
     from .chroma_services import collection_prompts, collection_categories
     
     return {
-        "prompts_collection_size": collection_prompts.count(),
-        "categories_collection_size": collection_categories.count()
+        "prompts_collection_size": collection_prompts.count() if collection_prompts else 0,
+        "categories_collection_size": collection_categories.count() if collection_categories else 0
     }
 
 '''
@@ -150,9 +158,7 @@ def run_in_thread(fn):
     thread = Thread(target=run)
     thread.start()
 
-@app.on_event("startup")
-def startup_event():
-    run_in_thread(main)
+# Startup function moved to async startup event below
 
 
 # categories injection setup
@@ -162,19 +168,27 @@ from sqlalchemy.orm import Session
 
 def create_categories(db: Session, category_names: list):
     for name in category_names:
-        category = Category(name=name)
-        db.add(category)
-        db.commit()
-        db.refresh(category)
+        existing_category = db.query(Category).filter(Category.name == name).first()
+        if not existing_category:
+            category = Category(name=name)
+            db.add(category)
+            db.commit()
+            db.refresh(category)
+        else:
+            category = existing_category
         
-        collection_categories.add(
-            documents=[name],
-            ids=[str(category.id)]
-        )
+        if collection_categories:  # Only add to ChromaDB if available
+            collection_categories.add(
+                documents=[name],
+                ids=[str(category.id)]
+            )
 
 @app.on_event("startup")
 async def startup_event():
-    print(collection_prompts.count())
+    # Run the main function in a thread
+    run_in_thread(main)
+    
+    print(collection_prompts.count() if collection_prompts else "ChromaDB not available")
     db = SessionLocal()
     try:
         categories = [

@@ -19,7 +19,7 @@ class User(UserCreate):
     role: str = "user"
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Art
 class ArtBase(BaseModel):
@@ -43,7 +43,7 @@ class Art(ArtBase):
     liked_by_user: bool = False
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Like
 class LikeBase(BaseModel):
@@ -51,7 +51,7 @@ class LikeBase(BaseModel):
     art_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Follow
 class FollowBase(BaseModel):
@@ -59,7 +59,7 @@ class FollowBase(BaseModel):
     followee_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # SearchHistory
 class SearchHistoryBase(BaseModel):
@@ -74,7 +74,7 @@ class SearchHistory(SearchHistoryBase):
     user_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # ArtHistory
 class ArtHistoryBase(BaseModel):
@@ -89,7 +89,7 @@ class ArtHistory(ArtHistoryBase):
     user_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # additional
 class CategoryCount(BaseModel):
@@ -104,7 +104,7 @@ class ArtMetadataSchema(BaseModel):
     upvotes: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ArtMetadataCreate(BaseModel):
     art_id: int
@@ -120,14 +120,7 @@ class ProcessedLinkResponse(BaseModel):
     link: str
     
     class Config:
-        orm_mode = True
-
-class ImageGenerationRequest(BaseModel):
-    prompt: str = Field(..., description="The text prompt to generate the image from.")
-    number_of_images: int = Field(1, ge=1, le=4, description="Number of images to generate.")
-
-class ImageGenerationResponse(BaseModel):
-    image_urls: List[str] = Field(..., description="List of URLs for the generated images.")
+        from_attributes = True
 
 class Category(BaseModel):
     id: int

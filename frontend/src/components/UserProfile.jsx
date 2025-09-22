@@ -19,6 +19,8 @@ const UserProfile = () => {
   const [user, setUser] = useState(null);
   const { user: currentUser } = useUser();
   const prevUserRef = useRef(null);
+  const [visibleArts, setVisibleArts] = useState([]);
+  const [arts, setArts] = useState([]);
   //useAuthRedirect();
 
   const textColor = useColorModeValue("gray.800", "white");
@@ -104,7 +106,13 @@ const UserProfile = () => {
         borderRadius="lg"
         bg="gray.50"
       >
-        <ArtGallery fetchArts={fetchArts} />
+        <ArtGallery
+          fetchArts={fetchArts}
+          visibleArts={visibleArts}
+          setVisibleArts={setVisibleArts}
+          arts={arts}
+          setArts={setArts}
+        />
       </Box>
     </VStack>
   );

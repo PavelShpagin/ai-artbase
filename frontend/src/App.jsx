@@ -38,7 +38,12 @@ const queryClient = new QueryClient();
 function clearArtLocalStorage() {
   // Remove all keys starting with "arts-" or "art-"
   Object.keys(localStorage).forEach((key) => {
-    if (key.startsWith("arts-") || key.startsWith("art-")) {
+    if (
+      key.startsWith("arts-detail-") ||
+      key.startsWith("arts-profile-") ||
+      key.startsWith("arts-liked-") ||
+      key.startsWith("art-showcase-")
+    ) {
       localStorage.removeItem(key);
     }
   });

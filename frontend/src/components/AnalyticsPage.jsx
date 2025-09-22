@@ -17,7 +17,7 @@ const AnalyticsPage = () => {
     axios
       .get(`${BASE_URL}/arts/dates/`)
       .then((response) => {
-        console.log(response);
+        // console.log(response);
 
         const localDates = response.data.map((utcStr) => {
           const convertedTimeStr = utcStr.replace(" ", "T") + "Z";
@@ -35,7 +35,7 @@ const AnalyticsPage = () => {
           return acc;
         }, {});
 
-        console.log(uploadsByHour);
+        //console.log(uploadsByHour);
 
         const currentHour = now.getHours();
         const newLabels = Array.from({ length: 24 }, (_, i) => {

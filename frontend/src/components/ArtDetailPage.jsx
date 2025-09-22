@@ -46,6 +46,8 @@ const ArtDetailPage = () => {
   // Initialize isLiked and toggleLike
   const [isLiked, setIsLiked] = useState(false);
   const [toggleLikeFunction, setToggleLikeFunction] = useState(() => () => {});
+  const [visibleArts, setVisibleArts] = useState([]);
+  const [arts, setArts] = useState([]);
 
   // Use the hook properly without conditional execution
   const artLikesHook = useArtLikes(
@@ -489,7 +491,14 @@ const ArtDetailPage = () => {
           </ModalContent>
         </Modal>
       </VStack>
-      <ArtGallery fetchArts={fetchSimilarArts} setArt={setArt} />
+      <ArtGallery
+        fetchArts={fetchSimilarArts}
+        setArt={setArt}
+        visibleArts={visibleArts}
+        setVisibleArts={setVisibleArts}
+        arts={arts}
+        setArts={setArts}
+      />
     </>
   );
 };

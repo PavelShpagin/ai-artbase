@@ -9,7 +9,13 @@ import React, {
 import Gallery from "react-photo-gallery";
 import { useNavigate, useLocation, useNavigationType } from "react-router-dom";
 // import { Box } from "@mui/material";
-import { Spinner, Box, Text, useToast } from "@chakra-ui/react";
+import {
+  Spinner,
+  Box,
+  Text,
+  useToast,
+  useColorModeValue,
+} from "@chakra-ui/react";
 import { useSearchQuery } from "../App";
 import OptimizedImage from "./OptimizedImage";
 import { useUser } from "../contexts/UserContext";
@@ -17,6 +23,19 @@ import { GoDownload } from "react-icons/go";
 import Heart from "react-heart";
 import fetchAPI from "../services/api";
 import useArtLikes from "../hooks/useArtLikes";
+import {
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  Flex,
+  Image,
+  ModalFooter,
+  useDisclosure,
+} from "@chakra-ui/react";
+import PurpleButton from "./Buttons";
 
 // Create a separate component for image rendering
 const ImageItem = ({
@@ -282,7 +301,15 @@ const PlaceholderItem = ({ left, top, width, height }) => (
   />
 );
 
-export const ArtGallery = ({ fetchArts, setArt }) => {
+export const ArtGallery = ({
+  fetchArts,
+  visibleArts,
+  setVisibleArts,
+  arts,
+  setArts,
+  setArt,
+  emptyStateComponent,
+}) => {
   const navigate = useNavigate();
   const loaderRef = useRef(null);
   const galleryRef = useRef(null);
@@ -292,7 +319,7 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   const { user } = useUser();
   const prevUserRef = useRef(user);
   const ITEMS_PER_PAGE = 20;
-
+  const toast = useToast();
   // Stage states
   const [stageStatus, setStageStatus] = useState({
     stageCleaningComplete: false,
@@ -303,8 +330,8 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   // Gallery states
   const [page, setPage] = useState(0);
   const [layoutHeight, setLayoutHeight] = useState(0);
-  const [visibleArts, setVisibleArts] = useState([]);
-  const [arts, setArts] = useState([]);
+  // const [visibleArts, setVisibleArts] = useState([]);
+  // const [arts, setArts] = useState([]);
   const [hasRenderedFirstImage, setHasRenderedFirstImage] = useState(false);
   const navType = useNavigationType();
 
@@ -314,6 +341,13 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
   // Add a new ref to track the latest search query
   const latestSearchQueryRef = useRef(searchQuery);
 
+  // Add these states for the modal
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [imageWidth, setImageWidth] = useState("auto");
+  const modalBg = useColorModeValue("white", "gray.800");
+
   // Helper to get current path key
   const getPathKey = useCallback(() => {
     if (location.pathname.startsWith("/profile")) {
@@ -322,6 +356,9 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     }
     if (location.pathname.startsWith("/liked")) {
       return `liked-${user?.id}`;
+    }
+    if (location.pathname.startsWith("/generate")) {
+      return `generate-${user?.id}`;
     }
     return location.pathname === "/"
       ? `main-${searchQuery}`
@@ -449,9 +486,11 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         title: img.title || "Untitled",
         prompt: img.prompt || "",
         liked_by_user: img.liked_by_user || false,
+        is_public: img.is_public || false,
+        is_generated: img.is_generated || false,
       }));
 
-    console.log("$$$savedVisibleArts", savedVisibleArts);
+    //console.log("$$$savedVisibleArts", savedVisibleArts);
 
     if (
       //savedVisibleArts &&
@@ -620,14 +659,164 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
     };
   }, [stageStatus, handleScroll]);
 
-  // Handle navigation and save scroll position
+  // Modify handleClick function
   const handleClick = (event, { photo }) => {
+    // Check if we're on the generate page
+    if (location.pathname === "/generate") {
+      //console.log("$$$photo", photo);
+      setSelectedPhoto(photo);
+      onOpen();
+      return;
+    }
+
+    // Original behavior for other pages
     sessionStorage.setItem(`scrollPosition-${"detail-/" + photo.id}`, "0");
     setHasRenderedFirstImage(false);
     if (setArt) {
       setArt(null);
     }
     navigate(`/${photo.id}`, { state: { photo } });
+  };
+
+  // Publish image function
+  const publishImage = async () => {
+    if (!selectedPhoto) return;
+
+    setIsPublishing(true);
+    try {
+      await fetchAPI(`/set-public/${selectedPhoto.id}`, "POST");
+
+      // Update localStorage
+      updateImagePublicStatus(selectedPhoto.id, true);
+
+      toast({
+        title: "Image published!",
+        description: "Your image is now public.",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+        position: "top",
+      });
+      onClose();
+    } catch (error) {
+      console.error("Failed to publish image:", error);
+      toast({
+        title: "Publication failed",
+        description: "Could not publish your image.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+        position: "top",
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  // Update revoke function to use the correct endpoint
+  const revokeImage = async () => {
+    if (!selectedPhoto) return;
+
+    setIsPublishing(true);
+    try {
+      // Use set-public endpoint with is_public=false query parameter
+      await fetchAPI(`/set-public/${selectedPhoto.id}?is_public=false`, "POST");
+
+      // Update localStorage
+      updateImagePublicStatus(selectedPhoto.id, false);
+
+      toast({
+        title: "Publication revoked",
+        description: "Your image is now private.",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+        position: "top",
+      });
+      onClose();
+    } catch (error) {
+      console.error("Failed to revoke publication:", error);
+      toast({
+        title: "Revocation failed",
+        description: "Could not make your image private.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+        position: "top",
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  // Helper function to update localStorage
+  const updateImagePublicStatus = (imageId, isPublic) => {
+    // Update in visibleArts
+    const updatedVisibleArts = visibleArts.map((art) =>
+      art.id === imageId ? { ...art, is_public: isPublic } : art
+    );
+    setVisibleArts(updatedVisibleArts);
+
+    // Update in arts
+    const updatedArts = arts.map((art) =>
+      art.id === imageId ? { ...art, is_public: isPublic } : art
+    );
+    setArts(updatedArts);
+
+    // Update in localStorage for generated arts
+    const generateStorageKey = `arts-generate-${user?.id}`;
+    const generateArts = JSON.parse(
+      localStorage.getItem(generateStorageKey) || "[]"
+    );
+    const updatedGenerateArts = generateArts.map((art) =>
+      art.id === imageId ? { ...art, is_public: isPublic } : art
+    );
+    localStorage.setItem(
+      generateStorageKey,
+      JSON.stringify(updatedGenerateArts)
+    );
+
+    // Update in localStorage for profile arts
+    const profileStorageKey = `arts-profile-${user?.id}`;
+    const profileArts = JSON.parse(
+      localStorage.getItem(profileStorageKey) || "[]"
+    );
+    console.log("profileArts", profileArts);
+
+    if (isPublic) {
+      // If making public, ensure it's in the profile arts
+      const artExists = profileArts.some((art) => art.id === imageId);
+      if (!artExists) {
+        // Find the art in the main arts array to add to profile
+        const artToAdd = arts.find((art) => art.id === imageId);
+        if (artToAdd) {
+          profileArts.unshift({ ...artToAdd, is_public: true });
+        }
+      } else {
+        // Update existing art
+        profileArts.forEach((art) => {
+          if (art.id === imageId) art.is_public = true;
+        });
+      }
+      localStorage.setItem(profileStorageKey, JSON.stringify(profileArts));
+    } else {
+      // If making private, remove from profile arts
+      const updatedProfileArts = profileArts.filter(
+        (art) => art.id !== imageId
+      );
+      localStorage.setItem(
+        profileStorageKey,
+        JSON.stringify(updatedProfileArts)
+      );
+    }
+  };
+
+  // Add image load handler
+  const handleImageLoad = (event) => {
+    const aspectRatio = event.target.naturalWidth / event.target.naturalHeight;
+    const height = 600;
+    const calculatedWidth = height * aspectRatio;
+    setImageWidth(`${calculatedWidth}px`);
   };
 
   // Custom renderer for images - now passes onFirstLoad to the ImageItem component
@@ -804,19 +993,22 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
         )}
 
         {/* ---- No Images Message ---- */}
-        {/* Show only when fetching is complete and resulted in zero arts */}
         {arts.length === 0 && stageStatus.stageFetchingComplete && (
-          <Box
-            display="flex"
-            justifyContent="center"
-            width="100%"
-            paddingTop="16px"
-            paddingBottom="16px"
-          >
-            <Text fontSize="lg" color="gray.500">
-              No images here yet...
-            </Text>
-          </Box>
+          <>
+            {emptyStateComponent || (
+              <Box
+                display="flex"
+                justifyContent="center"
+                width="100%"
+                paddingTop="16px"
+                paddingBottom="16px"
+              >
+                <Text fontSize="lg" color="gray.500">
+                  No images here yet...
+                </Text>
+              </Box>
+            )}
+          </>
         )}
 
         {(arts.length > 0 || !stageStatus.stageFetchingComplete) &&
@@ -886,6 +1078,52 @@ export const ArtGallery = ({ fetchArts, setArt }) => {
             </>
           )} */}
       </div>
+
+      {/* Update the modal */}
+      <Modal isOpen={isOpen} onClose={onClose}>
+        <ModalOverlay />
+        <ModalContent
+          maxWidth={imageWidth}
+          bg={modalBg}
+          borderRadius="xl"
+          marginLeft="10px"
+          marginRight="10px"
+        >
+          <ModalHeader fontWeight="bold" borderTopRadius="xl">
+            {"Publish AI Art"}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Flex direction="column" align="center">
+              {selectedPhoto && (
+                <Image
+                  onLoad={handleImageLoad}
+                  src={selectedPhoto.src}
+                  maxH="600px"
+                  w={imageWidth}
+                  objectFit="contain"
+                />
+              )}
+            </Flex>
+          </ModalBody>
+          <ModalFooter justifyContent="center">
+            {selectedPhoto?.is_public ? (
+              <PurpleButton
+                name="Revoke"
+                onClick={revokeImage}
+                loading={isPublishing}
+                colorScheme="red"
+              />
+            ) : (
+              <PurpleButton
+                name="Publish"
+                onClick={publishImage}
+                loading={isPublishing}
+              />
+            )}
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </>
   );
 };

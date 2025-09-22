@@ -55,7 +55,7 @@ const SignInModal = ({ isOpen, onClose }) => {
 
   const handleGoogleSuccess = async (response) => {
     try {
-      console.log(response.access_token);
+      // console.log(response.access_token);
 
       const data = await fetchAPI(
         "/auth/google",
@@ -68,7 +68,7 @@ const SignInModal = ({ isOpen, onClose }) => {
         }
       );
 
-      console.log("User authenticated:", data);
+      // console.log("User authenticated:", data);
       localStorage.setItem("token", data.access_token);
       const userData = await fetchAPI("/users/me", "GET", null, {
         Authorization: `Bearer ${data.access_token}`,
@@ -76,13 +76,13 @@ const SignInModal = ({ isOpen, onClose }) => {
       setUser(userData);
       handleClose();
     } catch (error) {
-      console.error("Error during Google login:", error);
+      // console.error("Error during Google login:", error);
     }
   };
 
   const googleLogin = useGoogleLogin({
     onSuccess: handleGoogleSuccess,
-    onError: () => console.log("Google login failed"),
+    // onError: () => console.log("Google login failed"),
   });
 
   const handleEmailChange = (event) => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Box, Heading, Text, Flex, Icon } from "@chakra-ui/react";
 import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
@@ -8,15 +8,19 @@ import { useAuthRedirect } from "../hooks/useAuthRedirect";
 
 const LikedPage = () => {
   const { user } = useUser();
+  const [visibleArts, setVisibleArts] = useState([]);
+  const [arts, setArts] = useState([]);
 
   useAuthRedirect();
 
   // Fetch liked arts for the current user
   const fetchLikedArts = useCallback(async () => {
     try {
+      //console.log(localStorage.getItem("token"));
       if (!user?.id) return;
+      console.log("fetching liked arts");
 
-      const pathKey = `liked-${user.id}`;
+      const pathKey = `liked-4`;
       const storageKey = `arts-${pathKey}`;
 
       // Since this is a user-specific page, we don't need to check for user changes
@@ -26,16 +30,17 @@ const LikedPage = () => {
       if (localStorage.getItem(storageKey)) {
         return;
       }
+      localStorage.setItem(storageKey, "[]");
 
       // Build the endpoint with appropriate parameters
-      const endpoint = `/arts/likes/${user.id}?viewer_id=${user.id}`;
+      const endpoint = `/arts/likes/4?viewer_id=4`;
       // Fetch the liked arts
       const response = await fetchAPI(endpoint, "GET");
       // Store in localStorage
 
       localStorage.setItem(storageKey, JSON.stringify(response));
 
-      // Store current user ID
+      // // Store current user ID
       localStorage.setItem(`${storageKey}-user`, user.id);
     } catch (error) {
       console.error("Failed to fetch liked arts:", error.message);
@@ -66,7 +71,15 @@ const LikedPage = () => {
         </Text>
       </Flex>
 
-      <ArtGallery fetchArts={fetchLikedArts} />
+      {user && (
+        <ArtGallery
+          fetchArts={fetchLikedArts}
+          visibleArts={visibleArts}
+          setVisibleArts={setVisibleArts}
+          arts={arts}
+          setArts={setArts}
+        />
+      )}
     </Box>
   );
 };

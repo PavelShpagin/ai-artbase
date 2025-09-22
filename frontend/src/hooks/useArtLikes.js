@@ -38,24 +38,36 @@ const useArtLikes = (artId, user, initialLikedStatus = false) => {
       const newLikedState = !isLiked;
 
       if (user) {
-        // important
         // Purge cache for arts-liked, visiblearts-liked, page-liked, scrollposition-liked, etc.
-        const localCacheKeys = [
-          `arts-liked-${user.id}`,
-          // `visibleArts-liked-${user.id}`,
-          // `page-liked-${user.id}`,
-          // `scrollPosition-liked-${user.id}`,
-        ];
+        const localCacheKeys = [`arts-liked-${user.id}`];
 
         const sessionCacheKeys = [
-          // `arts-liked-${user.id}`,
-          // `visibleArts-liked-${user.id}`,
           `page-liked-${user.id}`,
           `scrollPosition-liked-${user.id}`,
           `layoutHeight-liked-${user.id}`,
         ];
 
-        localCacheKeys.forEach((key) => {
+        // Instead of removing liked art collection, we'll upsert it
+        const likedKey = `arts-liked-${user.id}`;
+        let likedArts = [];
+
+        try {
+          // Get current liked arts
+          const likedArtsJson = localStorage.getItem(likedKey);
+          if (likedArtsJson) {
+            likedArts = JSON.parse(likedArtsJson);
+          }
+        } catch (error) {
+          console.error("Error parsing liked arts:", error);
+        }
+
+        // Remove the liked key from purge list
+        const filteredLocalKeys = localCacheKeys.filter(
+          (key) => key !== likedKey
+        );
+
+        // Purge other cache keys
+        filteredLocalKeys.forEach((key) => {
           localStorage.removeItem(key);
         });
 
@@ -76,14 +88,77 @@ const useArtLikes = (artId, user, initialLikedStatus = false) => {
         // Add user_id to query if logged in
         const queryString = user?.id ? `?user_id=${user.id}` : "";
 
-        console.log("endpoint", endpoint);
+        // console.log("endpoint", endpoint);
         // Call API to update like status
         await fetchAPI(`${endpoint}${queryString}`, "POST");
 
         if (user?.id) {
-          // console.log("UPDATE ALL");
           // For logged-in users, update all instances in localStorage
           updateAllArtInstancesInStorage(artId, user.id, newLikedState);
+
+          // Additionally, update the liked arts collection with an upsert operation
+          const likedKey = `arts-liked-${user.id}`;
+          let likedArts = [];
+
+          try {
+            // Get current liked arts
+            const likedArtsJson = localStorage.getItem(likedKey);
+            if (likedArtsJson) {
+              likedArts = JSON.parse(likedArtsJson);
+            }
+
+            if (newLikedState) {
+              // Like operation - find the art in other collections
+              let artDetails = null;
+
+              // Search for art details in other collections
+              for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith("arts-") && !key.startsWith("arts-liked-")) {
+                  try {
+                    const arts = JSON.parse(localStorage.getItem(key));
+                    if (Array.isArray(arts)) {
+                      const foundArt = arts.find((art) => art.id === artId);
+                      if (foundArt) {
+                        artDetails = foundArt;
+                        break;
+                      }
+                    }
+                  } catch (error) {
+                    console.error(`Error searching art in ${key}:`, error);
+                  }
+                }
+              }
+
+              if (artDetails) {
+                // Check if art already exists in liked collection
+                const artIndex = likedArts.findIndex((art) => art.id === artId);
+
+                if (artIndex >= 0) {
+                  // Update existing entry
+                  likedArts[artIndex] = {
+                    ...artDetails,
+                    liked_by_user: true,
+                  };
+                } else {
+                  // Add new entry
+                  likedArts.unshift({
+                    ...artDetails,
+                    liked_by_user: true,
+                  });
+                }
+
+                // Save updated collection
+                localStorage.setItem(likedKey, JSON.stringify(likedArts));
+              }
+            } else {
+              // Unlike operation - remove from liked collection
+              const filteredArts = likedArts.filter((art) => art.id !== artId);
+              localStorage.setItem(likedKey, JSON.stringify(filteredArts));
+            }
+          } catch (error) {
+            console.error("Error updating liked arts collection:", error);
+          }
         } else {
           // For guests, use localStorage
           if (newLikedState) {

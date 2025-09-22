@@ -8,8 +8,8 @@ export function useAuthRedirect() {
 
   useEffect(() => {
     if (!user) {
-      sessionStorage.setItem("scrollPosition-main-", "0");
-      navigate("/");
+      //sessionStorage.setItem("scrollPosition-main-", "0");
+      //navigate("/");
     }
   }, [user, navigate]);
 }

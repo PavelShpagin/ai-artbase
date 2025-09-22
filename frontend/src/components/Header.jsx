@@ -83,6 +83,8 @@ const UserMenu = ({ onSignOut }) => {
       location.pathname == "/profile" ||
       location.pathname == "/analytics"
     ) {
+      sessionStorage.setItem("scrollPosition-main-", "0");
+      window.scrollTo(0, 0);
       navigate("/");
     }
     window.location.reload();
@@ -92,6 +94,8 @@ const UserMenu = ({ onSignOut }) => {
 
   const handleLikedCLick = () => {
     onClose();
+    sessionStorage.setItem(`scrollPosition-liked-${user.id}`, "0");
+    window.scrollTo(0, 0);
     navigate("/liked");
   };
 
@@ -108,6 +112,8 @@ const UserMenu = ({ onSignOut }) => {
   const handleProfileCLick = () => {
     onClose();
     if (user && user.id) {
+      sessionStorage.setItem(`scrollPosition-profile-${user.id}`, "0");
+      window.scrollTo(0, 0);
       navigate(`/profile/${user.id}`);
     }
   };
@@ -187,63 +193,32 @@ const BottomNavigation = ({ onUploadClick, onGenerateClick }) => {
       alignItems="center"
       zIndex="sticky" // Ensure it's above content
     >
-      <Tooltip
-        label="Home"
-        aria-label="Home tooltip"
-        placement="top"
-        bg={useColorModeValue("purple.100", "purple.700")}
-        color={useColorModeValue("purple.600", "purple.200")}
-        py={1}
-        px={2}
-        borderRadius="md"
-      >
-        <IconButton
-          aria-label="Home"
-          icon={<Icon as={FiHome} boxSize={6} />}
-          size="lg"
-          variant="ghost"
-          onClick={handleHomeClick}
-          colorScheme="purple"
-        />
-      </Tooltip>
-      <Tooltip
-        label="Upload"
-        aria-label="Upload tooltip"
-        placement="top"
-        bg={useColorModeValue("purple.100", "purple.700")}
-        color={useColorModeValue("purple.600", "purple.200")}
-        py={1}
-        px={2}
-        borderRadius="md"
-      >
-        <IconButton
-          aria-label="Upload"
-          icon={<Icon as={FiUpload} boxSize={6} />}
-          size="lg"
-          variant="ghost"
-          onClick={onUploadClick} // Use passed handler
-          colorScheme="purple"
-        />
-      </Tooltip>
-      <Tooltip
-        label="Generate"
-        aria-label="Generate tooltip"
-        placement="top"
-        bg={useColorModeValue("purple.100", "purple.700")}
-        color={useColorModeValue("purple.600", "purple.200")}
-        py={1}
-        px={2}
-        borderRadius="md"
-      >
-        <IconButton
-          aria-label="Generate"
-          icon={<Icon as={FiCpu} boxSize={6} />}
-          size="lg"
-          variant="ghost"
-          onClick={onGenerateClick} // Use passed handler
-          colorScheme="purple"
-        />
-      </Tooltip>
+      <IconButton
+        aria-label="Home"
+        icon={<Icon as={FiHome} boxSize={6} />}
+        size="lg"
+        variant="ghost"
+        onClick={handleHomeClick}
+        colorScheme="purple"
+      />
+
+      <IconButton
+        aria-label="Upload"
+        icon={<Icon as={FiUpload} boxSize={6} />}
+        size="lg"
+        variant="ghost"
+        onClick={onUploadClick} // Use passed handler
+        colorScheme="purple"
+      />
+
+      <IconButton
+        aria-label="Generate"
+        icon={<Icon as={FiCpu} boxSize={6} />}
+        size="lg"
+        variant="ghost"
+        onClick={onGenerateClick} // Use passed handler
+        colorScheme="purple"
+      />
     </Box>
   );
 };
@@ -318,8 +293,9 @@ const Header = () => {
       searchQuery !== undefined // Add check for undefined
     ) {
       // Only navigate if search query actually changed and isn't undefined
-      if (window.location.pathname !== "/") {
-        // Prevent navigation if already on '/'
+      const currentPath = window.location.pathname;
+      if (currentPath !== "/" && currentPath !== "/generate") {
+        // Prevent navigation if already on '/' or '/generate'
         navigate("/", { replace: true });
       }
     }
@@ -336,6 +312,9 @@ const Header = () => {
 
   const handleGenerateClick = () => {
     // Navigate to the generate page
+    const userId = user ? user.id : 4; // Default to user ID 4 if not logged in
+    sessionStorage.setItem(`scrollPosition-generate-${userId}`, "0");
+    window.scrollTo(0, 0);
     navigate("/generate");
   };
 

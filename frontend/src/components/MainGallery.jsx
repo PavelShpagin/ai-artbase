@@ -20,6 +20,8 @@ const MainGallery = () => {
   const prevSearchQueryRef = useRef(searchQuery);
   const location = useLocation();
   const prevUserRef = useRef(user);
+  const [visibleArts, setVisibleArts] = useState([]);
+  const [arts, setArts] = useState([]);
 
   useLayoutEffect(() => {
     const handlePopState = (e) => {
@@ -92,7 +94,7 @@ const MainGallery = () => {
 
       // Otherwise fetch new data
       let endpoint = searchQuery
-        ? `/search/?query=${encodeURIComponent(searchQuery)}`
+        ? `/arts/search/?query=${encodeURIComponent(searchQuery)}`
         : "/arts/";
 
       // if (user?.id) {
@@ -108,7 +110,13 @@ const MainGallery = () => {
 
   return (
     <div>
-      <ArtGallery fetchArts={cachedFetchArts} />
+      <ArtGallery
+        fetchArts={cachedFetchArts}
+        visibleArts={visibleArts}
+        setVisibleArts={setVisibleArts}
+        arts={arts}
+        setArts={setArts}
+      />
     </div>
   );
 };

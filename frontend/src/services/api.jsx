@@ -6,7 +6,8 @@ const fetchAPI = async (
   method = "GET",
   body = null,
   headers = {},
-  as_json = true
+  as_json = true,
+  keepalive = false
 ) => {
   const url = `${BASE_URL}${endpoint}`;
   const options = {
@@ -15,6 +16,7 @@ const fetchAPI = async (
       ...headers,
     },
     body: body,
+    keepalive: keepalive,
   };
 
   const response = await fetch(url, options);
