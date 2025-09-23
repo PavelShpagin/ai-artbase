@@ -254,7 +254,7 @@ async def search_arts(query: str, user_id: Optional[int] = None, db: Session = D
             arts = db.query(models.Art).filter(
                 models.Art.prompt.ilike(f'%{query}%')
             ).filter(models.Art.is_public == True).limit(100).all()
-            return [schemas.Art.model_validate(art) for art in arts]
+            return [schemas.Art.model_validate(art.__dict__) for art in arts]
         except Exception as e:
             print(f"Database error in fallback search: {e}")
             return []
@@ -295,7 +295,7 @@ async def search_arts(query: str, user_id: Optional[int] = None, db: Session = D
             arts = db.query(models.Art).filter(
                 models.Art.prompt.ilike(f'%{query}%')
             ).filter(models.Art.is_public == True).limit(100).all()
-            return [schemas.Art.model_validate(art) for art in arts]
+            return [schemas.Art.model_validate(art.__dict__) for art in arts]
         except Exception as fallback_error:
             print(f"Fallback search also failed: {fallback_error}")
             return []
