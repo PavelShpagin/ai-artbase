@@ -62,7 +62,7 @@ jobs:
             docker pull pavelshpagin/aiartbase-scraper:latest
 
             # Store environment variables from GitHub secrets
-            cat > .env << EOF
+            cat > .env << 'EOF'
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             ALGORITHM=${{ secrets.ALGORITHM }}
             ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
