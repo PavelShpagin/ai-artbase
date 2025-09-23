@@ -293,9 +293,8 @@ const Header = () => {
       searchQuery !== undefined // Add check for undefined
     ) {
       // Only navigate if search query actually changed and isn't undefined
-      const currentPath = window.location.pathname;
-      if (currentPath !== "/" && currentPath !== "/generate") {
-        // Prevent navigation if already on '/' or '/generate'
+      if (window.location.pathname !== "/") {
+        // Prevent navigation if already on '/'
         navigate("/", { replace: true });
       }
     }
@@ -312,8 +311,7 @@ const Header = () => {
 
   const handleGenerateClick = () => {
     // Navigate to the generate page
-    const userId = user ? user.id : 4; // Default to user ID 4 if not logged in
-    sessionStorage.setItem(`scrollPosition-generate-${userId}`, "0");
+    sessionStorage.setItem(`scrollPosition-generate-${user.id}`, "0");
     window.scrollTo(0, 0);
     navigate("/generate");
   };

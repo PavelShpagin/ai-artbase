@@ -292,7 +292,9 @@ async def search_arts(query: str, user_id: Optional[int] = None, db: Session = D
         print(f"Database error in ChromaDB search: {e}")
         # Fallback to basic text search on database error
         try:
-            arts = db.query(models.Art).filter(models.Art.prompt.contains(query)).limit(50).all()
+            arts = db.query(models.Art).filter(
+                models.Art.prompt.ilike(f'%{query}%')
+            ).filter(models.Art.is_public == True).limit(100).all()
             return [schemas.Art.model_validate(art) for art in arts]
         except Exception as fallback_error:
             print(f"Fallback search also failed: {fallback_error}")

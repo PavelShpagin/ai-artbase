@@ -1,0 +1,20 @@
+# Google Cloud Platform / Vertex AI Configuration
+# You need to create a GCP project and service account to get these values
+
+GCP_SA_PROJECT_ID=your-gcp-project-id
+GCP_SA_PRIVATE_KEY_ID=your-private-key-id
+GCP_SA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour-Private-Key-Here\n-----END PRIVATE KEY-----"
+GCP_SA_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GCP_SA_CLIENT_ID=your-client-id
+GCP_SA_CLIENT_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project.iam.gserviceaccount.com
+GCP_LOCATION=us-central1
+
+# Database Configuration
+DATABASE_URL=postgresql://postgres:pirate228@92.242.187.70:5432/Ai_ArtBase
+APP_ENV=development
+
+
+
+
+
+
