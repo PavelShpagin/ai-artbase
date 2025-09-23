@@ -32,11 +32,21 @@ try:
     # CAUTION: Handling the multi-line private key from an env var is tricky!
     # It might need specific escaping or base64 decoding depending on how it was set.
     # Assuming the private key was set correctly preserving newlines:
+    private_key_raw = os.getenv("GCP_SA_PRIVATE_KEY")
+    if not private_key_raw:
+        logger.error("GCP_SA_PRIVATE_KEY environment variable is not set")
+        raise ValueError("GCP_SA_PRIVATE_KEY environment variable is not set")
+    
+    # Log what env vars are available (without exposing sensitive data)
+    logger.info(f"GCP env vars check - PROJECT_ID: {os.getenv('GCP_SA_PROJECT_ID') is not None}, "
+                f"PRIVATE_KEY: {len(private_key_raw) if private_key_raw else 0} chars, "
+                f"CLIENT_EMAIL: {os.getenv('GCP_SA_CLIENT_EMAIL') is not None}")
+    
     sa_info = {
         "type": os.getenv("GCP_SA_TYPE", "service_account"),
         "project_id": os.getenv("GCP_SA_PROJECT_ID"),
         "private_key_id": os.getenv("GCP_SA_PRIVATE_KEY_ID"),
-        "private_key": os.getenv("GCP_SA_PRIVATE_KEY").replace('\\n', '\n'), # Example fixup
+        "private_key": private_key_raw.replace('\\n', '\n'), # Fix newlines in private key
         "client_email": os.getenv("GCP_SA_CLIENT_EMAIL"),
         "client_id": os.getenv("GCP_SA_CLIENT_ID"),
         "auth_uri": os.getenv("GCP_SA_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
@@ -85,6 +95,18 @@ except (auth_exceptions.GoogleAuthError, ValueError, Exception) as e:
 logger.info(f"Vertex AI initialization finished. generation_model is set: {generation_model is not None}") # Added log
 
 router = APIRouter()
+
+@router.get("/arts/generation-status")
+async def get_generation_status():
+    """Debug endpoint to check if image generation is properly configured"""
+    return {
+        "generation_model_loaded": generation_model is not None,
+        "model_type": "Imagen3" if generation_model and not hasattr(generation_model, 'is_mock') else "Mock",
+        "gcp_project_id": os.getenv("GCP_SA_PROJECT_ID"),
+        "gcp_location": os.getenv("GCP_LOCATION"),
+        "has_private_key": bool(os.getenv("GCP_SA_PRIVATE_KEY")),
+        "private_key_length": len(os.getenv("GCP_SA_PRIVATE_KEY", "")) if os.getenv("GCP_SA_PRIVATE_KEY") else 0
+    }
 
 @router.post("/arts/", response_model=schemas.Art)
 async def create_art(prompt: str = Form(...), image: UploadFile = File(...), owner_id: int = Form(...), db: Session = Depends(get_db)): 
