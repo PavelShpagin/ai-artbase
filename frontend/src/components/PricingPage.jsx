@@ -15,29 +15,50 @@ const PACKS = [
     key: "starter",
     name: "Starter",
     credits: 100,
+    proDays: 7,
     price: "$5",
     perImage: "$0.05",
     envKey: "VITE_LS_URL_STARTER",
-    perks: ["100 image generations", "Never expire", "Private generations"],
+    perks: [
+      "100 image generations",
+      "7 days of Pro access",
+      "Premium gallery (top 5%)",
+      "HD downloads, no watermark",
+    ],
   },
   {
     key: "plus",
     name: "Plus",
     credits: 350,
+    proDays: 30,
     price: "$15",
     perImage: "$0.043",
     envKey: "VITE_LS_URL_PLUS",
     badge: "Best value",
-    perks: ["350 image generations", "Never expire", "Private generations", "HD downloads"],
+    perks: [
+      "350 image generations",
+      "30 days of Pro access",
+      "Premium gallery (top 5%)",
+      "HD downloads, no watermark",
+      "Save to collections",
+    ],
   },
   {
     key: "pro",
-    name: "Pro",
+    name: "Studio",
     credits: 1000,
+    proDays: 90,
     price: "$40",
     perImage: "$0.04",
     envKey: "VITE_LS_URL_PRO",
-    perks: ["1,000 image generations", "Never expire", "Private generations", "HD downloads", "Priority queue"],
+    perks: [
+      "1,000 image generations",
+      "90 days of Pro access",
+      "Premium gallery (top 5%)",
+      "HD downloads, no watermark",
+      "Save to collections",
+      "Priority queue",
+    ],
   },
 ];
 
@@ -84,9 +105,10 @@ export default function PricingPage() {
   return (
     <Box maxW="1200px" mx="auto" px={6} py={12}>
       <VStack spacing={3} mb={10} textAlign="center">
-        <Heading size="2xl">Pricing</Heading>
-        <Text color="gray.500" fontSize="lg">
-          Free 5 generations per day. Buy credits when you want more — they never expire.
+        <Heading size="2xl">One purchase. Credits + Pro access.</Heading>
+        <Text color="gray.500" fontSize="lg" maxW="640px">
+          Every pack unlocks both image-generation credits and time-bound access to the
+          Premium gallery (top 5% of our judged catalog) + HD downloads. No subscription, no auto-renew.
         </Text>
         {balance && (
           <HStack mt={2}>

@@ -38,6 +38,11 @@ class ArtCreate(ArtBase):
 
 class Art(ArtBase):
     id: int
+    aesthetic_score: Optional[float] = None
+    ai_obvious_score: Optional[float] = None
+    quality_score: Optional[float] = None
+    is_curated: Optional[bool] = False
+    is_premium: Optional[bool] = False
     date: datetime
     premium: bool = False
     liked_by_user: bool = False

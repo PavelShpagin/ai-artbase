@@ -11,7 +11,11 @@ import { useSearchQuery } from "../App";
 import { useLocation } from "react-router-dom";
 import { useUser } from "../contexts/UserContext";
 import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
-import AdSense from "./AdSense";
+import HeroBanner from "./HeroBanner";
+import TierToggle from "./TierToggle";
+import PaywallModal from "./PaywallModal";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://api.aiartbase.com";
 
 const MainGallery = () => {
   const { searchQuery, setSearchQuery, uiSearchQuery, setUiSearchQuery } =
@@ -22,6 +26,16 @@ const MainGallery = () => {
   const prevUserRef = useRef(user);
   const [visibleArts, setVisibleArts] = useState([]);
   const [arts, setArts] = useState([]);
+  const [tier, setTier] = useState("curated");
+  const [isPro, setIsPro] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
+
+  // Check pro status when user changes
+  useEffect(() => {
+    if (!user?.id) { setIsPro(false); return; }
+    fetch(`${API_BASE}/credits/balance/${user.id}`)
+      .then((r) => r.json()).then((d) => setIsPro(!!d.is_pro)).catch(() => {});
+  }, [user?.id]);
 
   useLayoutEffect(() => {
     const handlePopState = (e) => {
@@ -49,7 +63,7 @@ const MainGallery = () => {
 
       prevSearchQueryRef.current = searchQuery;
 
-      const storageKey = `arts-main-${searchQuery}`;
+      const storageKey = `arts-main-${tier}-${searchQuery}`;
 
       // Check if we need to update likes information due to user change
       if (
@@ -94,22 +108,44 @@ const MainGallery = () => {
 
       // Otherwise fetch new data
       let endpoint = searchQuery
-        ? `/arts/search/?query=${encodeURIComponent(searchQuery)}`
-        : "/arts/";
+        ? `/arts/search/?query=${encodeURIComponent(searchQuery)}&tier=${tier}`
+        : `/arts/?tier=${tier}&limit=100`;
+      if (user?.id) {
+        endpoint += `&viewer_id=${user.id}`;
+      }
 
-      // if (user?.id) {
-      //   endpoint += `${endpoint.includes("?") ? "&" : "?"}viewer_id=${user.id}`;
-      // }
-
-      const response = await fetchAPI(endpoint);
-      localStorage.setItem(storageKey, JSON.stringify(response));
+      try {
+        const response = await fetchAPI(endpoint);
+        localStorage.setItem(storageKey, JSON.stringify(response));
+      } catch (err) {
+        // 402 = pro required for premium tier; show paywall + revert
+        if (/Premium gallery requires|pro_required|402/i.test(err.message || "")) {
+          setPaywallOpen(true);
+          setTier("curated");
+        } else {
+          throw err;
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch arts: " + error.message);
     }
-  }, [searchQuery, user]);
+  }, [searchQuery, user, tier]);
+
+  // When tier changes, drop visible state so gallery refetches
+  useEffect(() => {
+    setVisibleArts([]);
+    setArts([]);
+  }, [tier]);
 
   return (
     <div>
+      {!searchQuery && <HeroBanner />}
+      <TierToggle
+        tier={tier}
+        onChange={setTier}
+        isPro={isPro}
+        onPremiumDenied={() => setPaywallOpen(true)}
+      />
       <ArtGallery
         fetchArts={cachedFetchArts}
         visibleArts={visibleArts}
@@ -117,6 +153,7 @@ const MainGallery = () => {
         arts={arts}
         setArts={setArts}
       />
+      <PaywallModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} />
     </div>
   );
 };

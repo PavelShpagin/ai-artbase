@@ -1,17 +1,23 @@
 """
 Credits + Lemon Squeezy integration.
 
-Tables (created via SQLAlchemy `Base.metadata.create_all` on startup):
+Each pack purchase grants BOTH:
+  - N image-generation credits (consumed past the free 5/day)
+  - M days of Pro access (premium gallery + HD downloads)
+
+Tables (created via SQLAlchemy on startup):
   user_credits(user_id, balance, updated_at)
   credit_ledger(id, user_id, delta, reason, external_ref, created_at)
+  users.is_pro (bool), users.pro_until (timestamp)
 
 Endpoints:
-  GET  /credits/balance/{user_id}          -> {balance, free_remaining_today}
-  POST /credits/admin/grant                -> dev/admin only, grant credits
+  GET  /credits/balance/{user_id}          -> {balance, free_remaining_today, is_pro, pro_until}
+  POST /credits/admin/grant                -> dev/admin only, grant credits + optional pro days
   POST /webhooks/lemon-squeezy             -> Lemon Squeezy purchase webhook
 
-Pricing (variant_id -> credits) is read from env LS_VARIANT_CREDITS as JSON, e.g.
-  LS_VARIANT_CREDITS='{"123456":100,"123457":350,"123458":1000}'
+Env (variant_id -> credits/pro_days) example:
+  LS_VARIANT_CREDITS='{"1616907":100,"1616909":350,"1616915":1000}'
+  LS_VARIANT_PRO_DAYS='{"1616907":7,"1616909":30,"1616915":90}'
 """
 import os, json, hmac, hashlib, logging
 from datetime import datetime, timedelta
@@ -25,13 +31,16 @@ from ..utils import get_db
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Free generations per day (reset midnight UTC)
 FREE_GENERATIONS_PER_DAY = int(os.getenv("FREE_GENERATIONS_PER_DAY", "5"))
 LS_WEBHOOK_SECRET = os.getenv("LS_WEBHOOK_SECRET", "")
 try:
     LS_VARIANT_CREDITS = json.loads(os.getenv("LS_VARIANT_CREDITS", "{}"))
 except Exception:
     LS_VARIANT_CREDITS = {}
+try:
+    LS_VARIANT_PRO_DAYS = json.loads(os.getenv("LS_VARIANT_PRO_DAYS", "{}"))
+except Exception:
+    LS_VARIANT_PRO_DAYS = {}
 
 
 def _free_used_today(db: Session, user_id: int) -> int:
@@ -78,20 +87,34 @@ def consume_credit_if_paid(db: Session, user_id: int, source: str):
     db.commit()
 
 
+def _user_is_pro(user) -> bool:
+    """Pro = explicit flag OR pro_until in future."""
+    if not user:
+        return False
+    if user.is_pro:
+        return True
+    return bool(user.pro_until and user.pro_until > datetime.utcnow())
+
+
 @router.get("/credits/balance/{user_id}")
 def get_balance(user_id: int, db: Session = Depends(get_db)):
     row = _get_or_create_credits(db, user_id)
     free_used = _free_used_today(db, user_id)
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    is_pro = _user_is_pro(user)
+    pro_until = user.pro_until.isoformat() if user and user.pro_until else None
     return {
         "user_id": user_id,
         "balance": row.balance,
         "free_per_day": FREE_GENERATIONS_PER_DAY,
         "free_used_today": free_used,
         "free_remaining_today": max(0, FREE_GENERATIONS_PER_DAY - free_used),
+        "is_pro": is_pro,
+        "pro_until": pro_until,
     }
 
 
-def _grant_credits(db: Session, user_id: int, amount: int, reason: str, external_ref: Optional[str]):
+def _grant_credits(db: Session, user_id: int, amount: int, reason: str, external_ref: Optional[str], pro_days: int = 0):
     if external_ref:
         existing = db.query(models.CreditLedger).filter(models.CreditLedger.external_ref == external_ref).first()
         if existing:
@@ -101,6 +124,14 @@ def _grant_credits(db: Session, user_id: int, amount: int, reason: str, external
     row.balance = (row.balance or 0) + amount
     entry = models.CreditLedger(user_id=user_id, delta=amount, reason=reason, external_ref=external_ref)
     db.add(entry)
+    if pro_days > 0:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user:
+            now = datetime.utcnow()
+            base = user.pro_until if (user.pro_until and user.pro_until > now) else now
+            user.pro_until = base + timedelta(days=pro_days)
+            user.is_pro = True
+            logger.info(f"granted {pro_days}d pro to user {user_id}, pro_until={user.pro_until.isoformat()}")
     db.commit()
     return entry
 
@@ -147,14 +178,15 @@ async def lemon_squeezy_webhook(request: Request, x_signature: str = Header(None
     except Exception:
         return {"ok": True, "ignored": "bad user_id"}
 
-    # Determine variant_id from first order item, look up credits
+    # Determine variant_id from first order item, look up credits + pro days
     first_item = (attrs.get("first_order_item") or {})
     variant_id = str(first_item.get("variant_id") or attrs.get("variant_id") or "")
     credits = LS_VARIANT_CREDITS.get(variant_id, 0)
-    if credits <= 0:
-        logger.warning(f"webhook variant_id={variant_id} not in LS_VARIANT_CREDITS map; payload={attrs.get('first_order_item')}")
+    pro_days = LS_VARIANT_PRO_DAYS.get(variant_id, 0)
+    if credits <= 0 and pro_days <= 0:
+        logger.warning(f"webhook variant_id={variant_id} not in LS_VARIANT_CREDITS/PRO_DAYS map")
         return {"ok": True, "ignored": f"unknown variant {variant_id}"}
 
     external_ref = f"ls:{data.get('id') or attrs.get('order_id') or attrs.get('identifier')}"
-    entry = _grant_credits(db, user_id, credits, reason="purchase", external_ref=external_ref)
-    return {"ok": True, "credited": credits, "user_id": user_id, "ledger_id": entry.id}
+    entry = _grant_credits(db, user_id, credits, reason="purchase", external_ref=external_ref, pro_days=pro_days)
+    return {"ok": True, "credited": credits, "pro_days": pro_days, "user_id": user_id, "ledger_id": entry.id}

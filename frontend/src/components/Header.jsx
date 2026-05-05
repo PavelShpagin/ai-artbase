@@ -502,7 +502,16 @@ const Header = () => {
           {" "}
           {/* Prevent shrinking */}
           {/* Desktop Upload/Generate Buttons - Always shown */}
-          <Box display={{ base: "none", md: "flex" }} gap={2}>
+          <Box display={{ base: "none", md: "flex" }} gap={2} alignItems="center">
+            <Button
+              size="sm"
+              variant="ghost"
+              colorScheme="purple"
+              fontWeight="600"
+              onClick={() => navigate("/pricing")}
+            >
+              Pricing
+            </Button>
             <Tooltip
               label="Generate"
               aria-label="Generate tooltip"

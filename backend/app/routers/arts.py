@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import case, func, text, exists, and_, literal, select
 from .. import schemas, models
 from typing import List, Optional
+from datetime import datetime
 import uuid
 from PIL import Image
 import io
@@ -278,52 +279,67 @@ async def create_art(prompt: str = Form(...), image: UploadFile = File(...), own
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create art entry: {str(e)}")
 
-@router.get("/arts/", response_model=List[schemas.Art])
-async def read_arts(limit: int = 1000, viewer_id: Optional[int] = None, db: Session = Depends(get_db)):
-    current_time_seconds = int(time.time() / 3600)
-    time_offset = current_time_seconds % 800
-    
-    if viewer_id is not None:
-        # Query arts with liked_by_user information
-        arts = db.query(
-            models.Art,
-            exists().where(
-                and_(
-                    models.Like.art_id == models.Art.id,
-                    models.Like.user_id == viewer_id,
-                )
-            ).label('liked_by_user')
-        ).join(
-            models.ArtMetadata, 
-            models.ArtMetadata.art_id == models.Art.id
-        ).filter(
-            models.Art.is_public == True
-        ).filter(
-            models.ArtMetadata.upvotes >= 25
-        ).offset(time_offset).limit(limit).all()
-    else:
-        # Query arts without liked_by_user information
-        arts = db.query(
-            models.Art,
-            literal(False).label('liked_by_user')
-        ).join(
-            models.ArtMetadata, 
-            models.ArtMetadata.art_id == models.Art.id
-        ).filter(
-            models.Art.is_public == True
-        ).filter(
-            models.ArtMetadata.upvotes >= 25
-        ).offset(time_offset).limit(limit).all()
+def _viewer_is_pro(db: Session, viewer_id: Optional[int]) -> bool:
+    if not viewer_id:
+        return False
+    u = db.query(models.User).filter(models.User.id == viewer_id).first()
+    if not u:
+        return False
+    if u.is_pro:
+        return True
+    return bool(u.pro_until and u.pro_until > datetime.utcnow())
 
-    # Transform the results into the expected format
-    arts_with_likes = [
-        {
-            **art.__dict__,
-            "liked_by_user": liked_by_user
-        }
-        for art, liked_by_user in arts
-    ]
-    return arts_with_likes
+
+@router.get("/arts/", response_model=List[schemas.Art])
+async def read_arts(
+    limit: int = 100,
+    page: int = 1,
+    tier: str = "curated",
+    viewer_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Tier-aware art feed.
+
+    tier=curated  - top ~30% by quality_score (free, default)
+    tier=premium  - top ~5% (requires Pro user; non-Pro viewer gets 402)
+    tier=all      - no quality filter (admin / debug)
+    """
+    tier = (tier or "curated").lower()
+    page = max(1, page)
+    limit = max(1, min(limit, 200))
+    offset = (page - 1) * limit
+    is_pro = _viewer_is_pro(db, viewer_id)
+
+    # Base filter: is_public + non-empty src + judged
+    base_filter = and_(models.Art.is_public == True, models.Art.src.isnot(None))
+
+    if tier == "premium":
+        if not is_pro:
+            raise HTTPException(status_code=402, detail={
+                "code": "pro_required",
+                "message": "Premium gallery requires Pro access. Buy a credit pack to unlock.",
+            })
+        tier_filter = models.Art.is_premium == True
+    elif tier == "all":
+        tier_filter = None
+    else:  # curated
+        tier_filter = models.Art.is_curated == True
+
+    q = db.query(
+        models.Art,
+        (case((models.Like.user_id == viewer_id, True), else_=False).label("liked_by_user")
+            if viewer_id is not None else literal(False).label("liked_by_user")),
+    )
+    if viewer_id is not None:
+        q = q.outerjoin(models.Like, and_(models.Like.art_id == models.Art.id, models.Like.user_id == viewer_id))
+    q = q.filter(base_filter)
+    if tier_filter is not None:
+        q = q.filter(tier_filter)
+    # Order by quality if available, else by id desc as fallback (newest first)
+    q = q.order_by(models.Art.quality_score.desc().nullslast(), models.Art.id.desc()).offset(offset).limit(limit)
+    rows = q.all()
+
+    return [{**art.__dict__, "liked_by_user": liked} for art, liked in rows]
 
 @router.get("/arts/dates/", response_model=List[str])
 async def read_art_dates(db: Session = Depends(get_db)):
@@ -332,14 +348,35 @@ async def read_art_dates(db: Session = Depends(get_db)):
     return dates
 
 @router.get("/arts/search/", response_model=List[schemas.Art])
-async def search_arts(query: str, user_id: Optional[int] = None, db: Session = Depends(get_db)):
+async def search_arts(
+    query: str,
+    user_id: Optional[int] = None,
+    tier: str = "curated",
+    db: Session = Depends(get_db),
+):
+    """Search with tier-aware filtering (matches /arts/ semantics)."""
+    tier = (tier or "curated").lower()
+    if tier == "premium" and not _viewer_is_pro(db, user_id):
+        raise HTTPException(status_code=402, detail={
+            "code": "pro_required",
+            "message": "Premium gallery requires Pro access. Buy a credit pack to unlock.",
+        })
+
+    def _apply_tier(q):
+        if tier == "premium":
+            return q.filter(models.Art.is_premium == True)
+        if tier == "all":
+            return q
+        return q.filter(models.Art.is_curated == True)
+
     # Check if ChromaDB is available
     if not collection_prompts:
         try:
-            # Fallback to basic text search if ChromaDB is not available
-            arts = db.query(models.Art).filter(
+            q = db.query(models.Art).filter(
                 models.Art.prompt.ilike(f'%{query}%')
-            ).filter(models.Art.is_public == True).limit(100).all()
+            ).filter(models.Art.is_public == True)
+            q = _apply_tier(q)
+            arts = q.order_by(models.Art.quality_score.desc().nullslast()).limit(100).all()
             return [schemas.Art.model_validate(art.__dict__) for art in arts]
         except Exception as e:
             print(f"Database error in fallback search: {e}")

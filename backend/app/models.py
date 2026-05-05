@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Table, TIMESTAMP, text
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, DateTime, Table, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from .database import Base
 from datetime import datetime
@@ -10,7 +10,7 @@ art_categories = Table('art_categories', Base.metadata,
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     password = Column(String)
@@ -20,6 +20,10 @@ class User(Base):
     hidden = Column(Boolean, default=False)
     premium = Column(Boolean, default=False)
     role = Column(String, default="user")
+    is_pro = Column(Boolean, default=False, nullable=False)
+    pro_until = Column(DateTime, nullable=True)
+    ls_subscription_id = Column(String, nullable=True)
+    ls_customer_id = Column(String, nullable=True)
 
     arts = relationship("Art", back_populates="owner")
     likes = relationship("Like", back_populates="user")
@@ -30,19 +34,26 @@ class User(Base):
     
 class Art(Base):
     __tablename__ = "arts"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     src = Column(String)
     prompt = Column(String)
     descriptive_prompt = Column(String)
     width = Column(Integer)
-    height = Column(Integer)    
+    height = Column(Integer)
     premium = Column(Boolean, default=False)
     date = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
     num_likes = Column(Integer, default=0)
     is_generated = Column(Boolean, default=False)
     is_public = Column(Boolean, default=True)
+    aesthetic_score = Column(Float, nullable=True)
+    ai_obvious_score = Column(Float, nullable=True)
+    quality_score = Column(Float, nullable=True)
+    is_curated = Column(Boolean, default=False, nullable=False)
+    is_premium = Column(Boolean, default=False, nullable=False)
+    judge_notes = Column(String, nullable=True)
+    judged_at = Column(DateTime, nullable=True)
 
     owner = relationship("User", back_populates="arts")
     likes = relationship("Like", back_populates="art")
