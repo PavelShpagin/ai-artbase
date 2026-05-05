@@ -2,7 +2,7 @@ from fastapi import FastAPI, BackgroundTasks
 from .database import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 from . import models
-from .routers import arts, auth, categories, users, processed_links, art_metadata
+from .routers import arts, auth, categories, users, processed_links, art_metadata, credits
 from .database import SessionLocal
 import shutil
 import uuid
@@ -45,6 +45,7 @@ app.include_router(categories.router)
 app.include_router(users.router)
 app.include_router(processed_links.router)
 app.include_router(art_metadata.router)
+app.include_router(credits.router)
 # app.include_router(scraper_router, prefix="/scraper", tags=["scraper"])
 
 # Add background task to run the scraper on startup

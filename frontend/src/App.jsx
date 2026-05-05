@@ -15,6 +15,7 @@ import MainGallery from "./components/MainGallery";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import LikedPage from "./components/LikedPage";
 import GeneratePage from "./components/GeneratePage";
+import PricingPage from "./components/PricingPage";
 // Create a context to share the search query across routes
 const SearchQueryContext = createContext();
 
@@ -112,6 +113,7 @@ function App() {
                     <Route path="/profile/:id" element={<UserProfile />} />
                     <Route path="/liked" element={<LikedPage />} />
                     <Route path="/generate" element={<GeneratePage />} />
+                    <Route path="/pricing" element={<PricingPage />} />
                   </Routes>
                 </Box>
               </Router>

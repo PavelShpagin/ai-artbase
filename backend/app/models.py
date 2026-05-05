@@ -110,6 +110,21 @@ class ArtMetadata(Base):
 
 class ProcessedLink(Base):
     __tablename__ = 'processed_links'
-    
+
     id = Column(Integer, primary_key=True, index=True)
     link = Column(String, unique=True, index=True)
+
+class UserCredits(Base):
+    __tablename__ = "user_credits"
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    balance = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class CreditLedger(Base):
+    __tablename__ = "credit_ledger"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    delta = Column(Integer, nullable=False)            # positive = credit, negative = spend
+    reason = Column(String, nullable=False)            # 'purchase', 'generation', 'refund', 'admin'
+    external_ref = Column(String, index=True)          # LemonSqueezy order id, etc. (idempotency)
+    created_at = Column(DateTime, default=datetime.utcnow)

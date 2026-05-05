@@ -175,7 +175,7 @@ const GeneratePage = () => {
         setArts((prev) => [...newArts, ...prev]);
 
         const storageKey = `arts-generate-${user?.id}`;
-        const arts = JSON.parse(localStorage.getItem(`${storageKey}`));
+        const arts = JSON.parse(localStorage.getItem(`${storageKey}`)) || [];
         const updatedArts = [...newArts, ...arts];
         localStorage.setItem(`${storageKey}`, JSON.stringify(updatedArts));
 

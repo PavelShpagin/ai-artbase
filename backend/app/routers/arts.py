@@ -25,74 +25,160 @@ from google.auth import exceptions as auth_exceptions # For catching errors
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-logger.info("Attempting to initialize Vertex AI from environment variables...")
+class _GeneratedImage:
+    """Mimics Vertex AI's GeneratedImage so call sites can stay unchanged."""
+    def __init__(self, image_bytes: bytes):
+        self._image_bytes = image_bytes
 
-try:
-    # Read necessary fields from environment variables
-    # CAUTION: Handling the multi-line private key from an env var is tricky!
-    # It might need specific escaping or base64 decoding depending on how it was set.
-    # Assuming the private key was set correctly preserving newlines:
-    private_key_raw = os.getenv("GCP_SA_PRIVATE_KEY")
-    if not private_key_raw:
-        logger.error("GCP_SA_PRIVATE_KEY environment variable is not set")
-        raise ValueError("GCP_SA_PRIVATE_KEY environment variable is not set")
-    
-    # Log what env vars are available (without exposing sensitive data)
-    logger.info(f"GCP env vars check - PROJECT_ID: {os.getenv('GCP_SA_PROJECT_ID') is not None}, "
-                f"PRIVATE_KEY: {len(private_key_raw) if private_key_raw else 0} chars, "
-                f"CLIENT_EMAIL: {os.getenv('GCP_SA_CLIENT_EMAIL') is not None}")
-    
-    sa_info = {
-        "type": os.getenv("GCP_SA_TYPE", "service_account"),
-        "project_id": os.getenv("GCP_SA_PROJECT_ID"),
-        "private_key_id": os.getenv("GCP_SA_PRIVATE_KEY_ID"),
-        "private_key": private_key_raw.replace('\\n', '\n'), # Fix newlines in private key
-        "client_email": os.getenv("GCP_SA_CLIENT_EMAIL"),
-        "client_id": os.getenv("GCP_SA_CLIENT_ID"),
-        "auth_uri": os.getenv("GCP_SA_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
-        "token_uri": os.getenv("GCP_SA_TOKEN_URI", "https://oauth2.googleapis.com/token"),
-        "auth_provider_x509_cert_url": os.getenv("GCP_SA_AUTH_PROVIDER_URL", "https://www.googleapis.com/oauth2/v1/certs"),
-        "client_x509_cert_url": os.getenv("GCP_SA_CLIENT_CERT_URL"),
-        "universe_domain": "googleapis.com"
-        # Add other fields if necessary
-    }
+class _GenerateResponse:
+    def __init__(self, image_bytes_list):
+        self.images = [_GeneratedImage(b) for b in image_bytes_list]
 
-    # Validate that essential fields were loaded
-    if not all([sa_info["project_id"], sa_info["private_key"], sa_info["client_email"]]):
-         raise ValueError("Missing essential GCP service account environment variables.")
+class CloudflareWorkersAIModel:
+    """Wrapper around Cloudflare Workers AI image-gen models (e.g. @cf/black-forest-labs/flux-1-schnell).
+    Free tier: ~10,000 neurons/day. Returns Vertex-compatible response shape."""
+    def __init__(self, account_id: str, api_token: str, model: str = "@cf/black-forest-labs/flux-1-schnell"):
+        self.account_id = account_id
+        self.api_token = api_token
+        self.model = model
+        self.endpoint = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
 
-    # Create credentials directly from the info dictionary
-    credentials = service_account.Credentials.from_service_account_info(sa_info)
-    logger.info(f"Created service account credentials for project '{sa_info['project_id']}'.")
-
-    # Now initialize Vertex AI using these explicit credentials
-    import vertexai
-    from vertexai.preview.vision_models import ImageGenerationModel
-
-    PROJECT_ID = sa_info["project_id"] # Use project_id from credentials
-    LOCATION = os.getenv("GCP_LOCATION", "us-central1") # Still need location
-
-    logger.info(f"Initializing Vertex AI for project '{PROJECT_ID}' in location '{LOCATION}' with explicit credentials...")
-    vertexai.init(project=PROJECT_ID, location=LOCATION, credentials=credentials)
-    logger.info("Vertex AI initialized. Loading model...")
-
-    generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
-    logger.info(f"Vertex AI ImageGenerationModel loaded successfully from {LOCATION} for project {PROJECT_ID}")
+    def generate_images(self, prompt: str, number_of_images: int = 1, **_ignored):
+        import httpx, base64
+        bytes_out = []
+        n = max(1, min(int(number_of_images), 4))
+        for _ in range(n):
+            try:
+                r = httpx.post(
+                    self.endpoint,
+                    headers={"Authorization": f"Bearer {self.api_token}", "Content-Type": "application/json"},
+                    json={"prompt": prompt},
+                    timeout=60,
+                )
+                r.raise_for_status()
+                data = r.json()
+                img_b64 = (data.get("result") or {}).get("image")
+                if img_b64:
+                    bytes_out.append(base64.b64decode(img_b64))
+                else:
+                    logger.warning(f"Cloudflare AI returned no image: {data}")
+            except Exception as e:
+                logger.error(f"Cloudflare AI call failed: {e}")
+        return _GenerateResponse(bytes_out)
 
 
-except (auth_exceptions.GoogleAuthError, ValueError, Exception) as e:
-    logger.error(f"Error initializing Vertex AI or loading model from env vars: {e}")
-    logger.info("Falling back to mock image generation for development")
+class GeminiImageGenerationModel:
+    """Wrapper around google.generativeai that exposes a Vertex-compatible
+    .generate_images(prompt, number_of_images) interface, returning an object
+    with .images[i]._image_bytes."""
+    def __init__(self, model_name: str):
+        import google.generativeai as genai
+        self._genai = genai
+        self._model_name = model_name
+        self._model = genai.GenerativeModel(model_name)
+
+    def generate_images(self, prompt: str, number_of_images: int = 1, **_ignored):
+        bytes_out = []
+        for _ in range(max(1, min(int(number_of_images), 4))):
+            resp = self._model.generate_content(prompt)
+            extracted = self._extract_image_bytes(resp)
+            if extracted:
+                bytes_out.append(extracted)
+        return _GenerateResponse(bytes_out)
+
+    @staticmethod
+    def _extract_image_bytes(resp):
+        try:
+            for cand in getattr(resp, "candidates", []) or []:
+                content = getattr(cand, "content", None)
+                if not content:
+                    continue
+                for part in getattr(content, "parts", []) or []:
+                    inline = getattr(part, "inline_data", None)
+                    if inline and getattr(inline, "data", None):
+                        return inline.data
+        except Exception as e:
+            logger.error(f"Failed to extract image bytes from Gemini response: {e}")
+        return None
+
+logger.info("Initializing image generation backend...")
+generation_model = None
+generation_backend = "none"
+
+# Preferred: Cloudflare Workers AI flux-1-schnell. Free up to 10k neurons/day, no quota dance.
+cf_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+cf_token = os.getenv("CLOUDFLARE_API_TOKEN")
+if cf_account and cf_token:
+    try:
+        cf_model_name = os.getenv("CLOUDFLARE_AI_MODEL", "@cf/black-forest-labs/flux-1-schnell")
+        generation_model = CloudflareWorkersAIModel(cf_account, cf_token, cf_model_name)
+        generation_backend = f"cloudflare:{cf_model_name}"
+        logger.info(f"Image generation backend: {generation_backend}")
+    except Exception as e:
+        logger.error(f"Cloudflare Workers AI init failed: {e}")
+        generation_model = None
+
+# Fallback: nano-banana / Gemini 2.5 Flash Image (paid). Uses GEMINI_API_KEY.
+gemini_key = os.getenv("GEMINI_API_KEY") if generation_model is None else None
+if gemini_key:
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=gemini_key)
+        gemini_model_name = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image-preview")
+        generation_model = GeminiImageGenerationModel(gemini_model_name)
+        generation_backend = f"gemini:{gemini_model_name}"
+        logger.info(f"Image generation backend: {generation_backend}")
+    except Exception as e:
+        logger.error(f"Gemini image-gen init failed, will try Vertex fallback: {e}")
+        generation_model = None
+
+# Fallback 1: Vertex AI Imagen 3 (requires GCP billing on the project).
+if generation_model is None:
+    try:
+        private_key_raw = os.getenv("GCP_SA_PRIVATE_KEY")
+        if not private_key_raw:
+            raise ValueError("GCP_SA_PRIVATE_KEY environment variable is not set")
+        sa_info = {
+            "type": os.getenv("GCP_SA_TYPE", "service_account"),
+            "project_id": os.getenv("GCP_SA_PROJECT_ID"),
+            "private_key_id": os.getenv("GCP_SA_PRIVATE_KEY_ID"),
+            "private_key": private_key_raw.replace('\\n', '\n'),
+            "client_email": os.getenv("GCP_SA_CLIENT_EMAIL"),
+            "client_id": os.getenv("GCP_SA_CLIENT_ID"),
+            "auth_uri": os.getenv("GCP_SA_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
+            "token_uri": os.getenv("GCP_SA_TOKEN_URI", "https://oauth2.googleapis.com/token"),
+            "auth_provider_x509_cert_url": os.getenv("GCP_SA_AUTH_PROVIDER_URL", "https://www.googleapis.com/oauth2/v1/certs"),
+            "client_x509_cert_url": os.getenv("GCP_SA_CLIENT_CERT_URL"),
+            "universe_domain": "googleapis.com",
+        }
+        if not all([sa_info["project_id"], sa_info["private_key"], sa_info["client_email"]]):
+            raise ValueError("Missing essential GCP service account environment variables.")
+        credentials = service_account.Credentials.from_service_account_info(sa_info)
+        import vertexai
+        from vertexai.preview.vision_models import ImageGenerationModel
+        PROJECT_ID = sa_info["project_id"]
+        LOCATION = os.getenv("GCP_LOCATION", "us-central1")
+        vertexai.init(project=PROJECT_ID, location=LOCATION, credentials=credentials)
+        generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-002")
+        generation_backend = f"vertex-imagen3:{LOCATION}"
+        logger.info(f"Image generation backend: {generation_backend}")
+    except Exception as e:
+        logger.error(f"Vertex Imagen init failed: {e}")
+        generation_model = None
+
+# Fallback 2: mock (only for local development).
+if generation_model is None:
     try:
         import sys
         sys.path.append(os.path.dirname(os.path.dirname(__file__)))
         from mock_image_generation import MockImageGenerationModel
         generation_model = MockImageGenerationModel.from_pretrained("mock-imagen-3.0")
+        generation_backend = "mock"
+        logger.info("Image generation backend: mock (no real API available)")
     except Exception as mock_error:
         logger.error(f"Failed to initialize mock generation: {mock_error}")
-        generation_model = None
 
-logger.info(f"Vertex AI initialization finished. generation_model is set: {generation_model is not None}") # Added log
+logger.info(f"Image generation initialization finished. backend={generation_backend}, model_set={generation_model is not None}")
 
 router = APIRouter()
 
@@ -101,11 +187,11 @@ async def get_generation_status():
     """Debug endpoint to check if image generation is properly configured"""
     return {
         "generation_model_loaded": generation_model is not None,
-        "model_type": "Imagen3" if generation_model and not hasattr(generation_model, 'is_mock') else "Mock",
+        "backend": generation_backend,
         "gcp_project_id": os.getenv("GCP_SA_PROJECT_ID"),
         "gcp_location": os.getenv("GCP_LOCATION"),
         "has_private_key": bool(os.getenv("GCP_SA_PRIVATE_KEY")),
-        "private_key_length": len(os.getenv("GCP_SA_PRIVATE_KEY", "")) if os.getenv("GCP_SA_PRIVATE_KEY") else 0
+        "has_gemini_key": bool(os.getenv("GEMINI_API_KEY")),
     }
 
 @router.post("/arts/", response_model=schemas.Art)
@@ -628,9 +714,32 @@ async def generate_image_from_prompt(
 ):
     if user_id is None:
         user_id = 4
-        
+
     if not generation_model: # Check if the Vertex AI model was initialized
         raise HTTPException(status_code=503, detail="Image generation service model is not available.")
+
+    # Credit / free-tier gate. Each requested image costs either 1 free slot or 1 credit.
+    from .credits import can_generate, consume_credit_if_paid
+    needed = int(number_of_images or 1)
+    sources = []  # list of "free" or "credits" per image we'll deliver
+    # Greedy: use free first, then credits.
+    for _ in range(needed):
+        gate = can_generate(db, user_id)
+        if not gate["allowed"]:
+            if not sources:
+                raise HTTPException(status_code=402, detail={
+                    "code": "out_of_credits",
+                    "message": f"Free limit reached and 0 credits. Buy a pack to continue.",
+                    "balance": gate["balance"],
+                    "free_remaining_today": gate["free_remaining"],
+                })
+            # Some images allowed; trim request size to what we can serve.
+            number_of_images = len(sources)
+            break
+        sources.append(gate["source"])
+        # If we picked credits, eagerly decrement so we don't double-spend on next iter.
+        if gate["source"] == "credits":
+            consume_credit_if_paid(db, user_id, "credits")
 
     try:
         print(f"Generating image with prompt: {prompt}, count: {number_of_images}")
