@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box, Heading, Text, SimpleGrid, VStack, HStack, Button, Badge, Icon, useToast,
 } from "@chakra-ui/react";
 import { FiCheck, FiZap } from "react-icons/fi";
-import { UserContext } from "../contexts/UserContext";
+import { useUser } from "../contexts/UserContext";
 
 // Lemon Squeezy hosted checkout URLs.
 // These are read from Vite env so we can swap them per-environment.
@@ -72,7 +72,8 @@ function buildCheckoutUrl(baseUrl, userId) {
 }
 
 export default function PricingPage() {
-  const { user } = useContext(UserContext) || {};
+  const ctx = useUser() || {};
+  const user = ctx.user;
   const userId = user?.id;
   const toast = useToast();
   const [balance, setBalance] = useState(null);
