@@ -23,7 +23,7 @@ function usePremiumSamples(n = 6) {
   return imgs;
 }
 
-// ------------------- V1: current minimal (tight, two tags) -------------------
+// ------------------- V1: minimal centered hero -------------------
 export function HeroV1() {
   const bg = useColorModeValue(
     "linear-gradient(135deg, #f5edff 0%, #e6f0ff 100%)",
@@ -32,14 +32,14 @@ export function HeroV1() {
   const heading = useColorModeValue("gray.900", "white");
   const sub = useColorModeValue("gray.600", "gray.300");
   return (
-    <Box bgGradient={bg} borderRadius={{ base: 0, md: "xl" }} mx={{ base: 0, md: 4 }} mt={{ base: 0, md: 2 }} mb={4} px={{ base: 5, md: 8 }} py={{ base: 5, md: 6 }}>
-      <VStack align="flex-start" spacing={2} maxW="1100px" mx="auto">
+    <Box bgGradient={bg} borderRadius={{ base: 0, md: "xl" }} mx={{ base: 0, md: 4 }} mt={{ base: 0, md: 2 }} mb={4} px={{ base: 5, md: 8 }} py={{ base: 6, md: 10 }}>
+      <VStack align="center" textAlign="center" spacing={3} maxW="780px" mx="auto">
         <HStack spacing={2}>
           <Tag colorScheme="purple" borderRadius="full" px={3}><Icon as={FiStar} mr={1} />Hand-picked</Tag>
           <Tag colorScheme="blue" borderRadius="full" px={3}><Icon as={FiZap} mr={1} />Free flux generation</Tag>
         </HStack>
-        <Heading size={{ base: "md", md: "lg" }} color={heading} lineHeight="1.15">AI art that doesn't look like AI.</Heading>
-        <Text color={sub} fontSize={{ base: "sm", md: "md" }} maxW="780px">
+        <Heading size={{ base: "lg", md: "xl" }} color={heading} lineHeight="1.1">AI art that doesn't look like AI.</Heading>
+        <Text color={sub} fontSize={{ base: "sm", md: "md" }}>
           Every image scored by Gemini Vision against composition, craftsmanship, and an "AI obviousness" rubric. We curate from across the AI art ecosystem.
         </Text>
       </VStack>
