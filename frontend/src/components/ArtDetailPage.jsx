@@ -362,7 +362,7 @@ const ArtDetailPage = () => {
                   >
                     <IoArrowBackOutline size={22} />
                   </Box>
-                  {/* Quality badge — shows our judge score so visitors see the UVP in action. */}
+                  {/* Quality badge — glassmorphism: dark frosted pill, tier color as a left accent. */}
                   {typeof art.quality_score === "number" && (
                     <Box
                       position="absolute"
@@ -372,23 +372,26 @@ const ArtDetailPage = () => {
                       display="flex"
                       alignItems="center"
                       gap={1.5}
-                      bg={
-                        art.quality_score >= 75
-                          ? "rgba(31,111,58,0.92)"
-                          : art.quality_score >= 55
-                          ? "rgba(168,107,0,0.92)"
-                          : "rgba(138,31,31,0.92)"
-                      }
+                      bg="rgba(15,15,20,0.55)"
                       color="white"
-                      px={3}
+                      pl={2.5}
+                      pr={3}
                       py={1.5}
                       borderRadius="full"
                       fontSize="sm"
                       fontWeight="700"
-                      backdropFilter="blur(4px)"
+                      backdropFilter="blur(8px)"
+                      borderLeft={
+                        art.quality_score >= 75
+                          ? "3px solid #34d399"
+                          : art.quality_score >= 55
+                          ? "3px solid #fbbf24"
+                          : "3px solid #f87171"
+                      }
+                      boxShadow="0 1px 6px rgba(0,0,0,0.25)"
                       title={art.judge_notes || "AI ArtBase quality score"}
                     >
-                      <Icon as={FiAward} boxSize={3.5} />
+                      <Icon as={FiAward} boxSize={3.5} opacity={0.85} />
                       {Math.round(art.quality_score)}%
                     </Box>
                   )}
