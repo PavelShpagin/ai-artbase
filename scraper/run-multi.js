@@ -21,6 +21,7 @@ const axios = require("axios");
 const FormData = require("form-data");
 const path = require("path");
 const crypto = require("crypto");
+const puppeteerSources = require("./sources-puppeteer");
 
 const API_URL = process.env.API_URL || "http://localhost:8000";
 const OWNER_ID = parseInt(process.env.OWNER_ID || "4", 10);
@@ -130,77 +131,14 @@ async function* sourceCivitai({ limit }) {
   }
 }
 
-// ---------- SOURCE: Lexica ----------
+// ---------- SOURCE: Lexica (Puppeteer-based; their REST API is dead) ----------
 async function* sourceLexica({ limit }) {
-  // Lexica search API: 50 results per query. We rotate seed queries to get variety.
-  const queries = [
-    "cinematic", "portrait", "landscape", "anime", "cyberpunk",
-    "fantasy", "sci-fi", "watercolor", "oil painting", "concept art",
-    "photorealistic", "magical", "dragon", "warrior", "abstract",
-  ];
-  let pulled = 0;
-  for (const q of queries) {
-    if (pulled >= limit) return;
-    let resp;
-    try {
-      resp = await axios.get("https://lexica.art/api/v1/search", {
-        params: { q },
-        headers: { "User-Agent": UA },
-        timeout: 30000,
-      });
-    } catch (e) {
-      console.error(`[lexica] query "${q}" failed: ${e.response?.status} ${e.message}`);
-      continue;
-    }
-    const images = resp.data?.images || [];
-    for (const it of images) {
-      if (pulled >= limit) return;
-      if (!it.srcSmall && !it.src) continue;
-      yield {
-        source: "lexica",
-        sourceId: String(it.id),
-        link: it.src || it.srcSmall,
-        src: it.src || it.srcSmall,
-        prompt: it.prompt || "",
-        width: it.width || 0,
-        height: it.height || 0,
-      };
-      pulled += 1;
-    }
-    await sleep(SLEEP_MS);
-  }
+  yield* puppeteerSources.scrapeLexica({ limit });
 }
 
-// ---------- SOURCE: Mage.space (best-effort HTML) ----------
+// ---------- SOURCE: Mage.space (Puppeteer; needs to render JS) ----------
 async function* sourceMage({ limit }) {
-  // Mage public gallery; no official API. Fetch the public feed and parse JSON-LD.
-  // Best-effort: skip on any error.
-  try {
-    const resp = await axios.get("https://www.mage.space/api/v3/images/feed", {
-      params: { limit: Math.min(100, limit), filter: "best", interval: "week" },
-      headers: { "User-Agent": UA, Accept: "application/json" },
-      timeout: 30000,
-    });
-    const items = resp.data?.results || resp.data?.items || resp.data || [];
-    let pulled = 0;
-    for (const it of items) {
-      if (pulled >= limit) return;
-      const url = it.image_url || it.url || it.src;
-      if (!url) continue;
-      yield {
-        source: "mage",
-        sourceId: String(it.id || crypto.createHash("md5").update(url).digest("hex").slice(0, 16)),
-        link: url,
-        src: url,
-        prompt: it.prompt || it.text_prompt || "",
-        width: it.width || 0,
-        height: it.height || 0,
-      };
-      pulled += 1;
-    }
-  } catch (e) {
-    console.error(`[mage] feed request failed: ${e.response?.status} ${e.message} — likely needs Puppeteer; skipping`);
-  }
+  yield* puppeteerSources.scrapeMage({ limit });
 }
 
 // ---------- DISPATCHER ----------
@@ -269,7 +207,11 @@ async function main() {
   console.log(`Total added: ${results.reduce((s, r) => s + r.added, 0)}`);
 }
 
-main().catch((e) => {
-  console.error("fatal:", e);
-  process.exit(1);
-});
+main()
+  .catch((e) => {
+    console.error("fatal:", e);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    try { await puppeteerSources.closeBrowser(); } catch (_) {}
+  });

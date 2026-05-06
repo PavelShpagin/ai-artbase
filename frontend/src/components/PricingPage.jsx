@@ -130,11 +130,11 @@ export default function PricingPage() {
             bg="white"
             _dark={{ bg: "gray.800" }}
             borderRadius="xl"
-            borderWidth="1px"
-            borderColor={p.badge ? "purple.400" : "gray.200"}
+            borderWidth={p.badge ? "2px" : "1px"}
+            borderColor={p.badge ? "purple.500" : "gray.200"}
             p={6}
             position="relative"
-            shadow={p.badge ? "lg" : "sm"}
+            shadow="sm"
           >
             {p.badge && (
               <Badge

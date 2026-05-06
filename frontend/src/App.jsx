@@ -107,6 +107,11 @@ function App() {
                 <Box pt={84}>
                   <Routes>
                     <Route path="/" element={<MainGallery />} />
+                    <Route path="/v1" element={<MainGallery variant="v1" />} />
+                    <Route path="/v2" element={<MainGallery variant="v2" />} />
+                    <Route path="/v3" element={<MainGallery variant="v3" />} />
+                    <Route path="/v4" element={<MainGallery variant="v4" />} />
+                    <Route path="/v5" element={<MainGallery variant="v5" />} />
                     <Route path="/:id" element={<ArtDetailPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/admin" element={<AdminTab />} />

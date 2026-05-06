@@ -14,13 +14,20 @@ import { fetchBatchArtData, extractStoredArtIds } from "../services/artService";
 import HeroBanner from "./HeroBanner";
 import TierToggle from "./TierToggle";
 import PaywallModal from "./PaywallModal";
+import { HeroV1, HeroV2, HeroV3, HeroV4, HeroV5 } from "./HeroVariants";
+
+const HERO_BY_VARIANT = { v1: HeroV1, v2: HeroV2, v3: HeroV3, v4: HeroV4, v5: HeroV5 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://api.aiartbase.com";
 
-const MainGallery = () => {
+const MainGallery = ({ variant }) => {
   const { searchQuery, setSearchQuery, uiSearchQuery, setUiSearchQuery } =
     useSearchQuery();
   const { user } = useUser();
+  // Pick hero based on prop OR querystring ?hero=v2  (lets you A/B without route changes)
+  const urlHeroMatch = typeof window !== "undefined" && window.location.search.match(/[?&]hero=(v[1-5])/);
+  const heroKey = (variant || urlHeroMatch?.[1] || "v1").toLowerCase();
+  const HeroComponent = HERO_BY_VARIANT[heroKey] || HeroBanner;
   const prevSearchQueryRef = useRef(searchQuery);
   const location = useLocation();
   const prevUserRef = useRef(user);
@@ -139,7 +146,7 @@ const MainGallery = () => {
 
   return (
     <div>
-      {!searchQuery && <HeroBanner />}
+      {!searchQuery && <HeroComponent />}
       <TierToggle
         tier={tier}
         onChange={setTier}

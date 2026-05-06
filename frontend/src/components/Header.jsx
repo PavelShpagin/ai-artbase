@@ -56,6 +56,7 @@ import {
   FiUpload,
   FiCpu,
   FiHome,
+  FiTag,
 } from "react-icons/fi";
 import { MdHistory } from "react-icons/md";
 import PurpleButton from "./Buttons"; // Make sure path is correct
@@ -217,6 +218,15 @@ const BottomNavigation = ({ onUploadClick, onGenerateClick }) => {
         size="lg"
         variant="ghost"
         onClick={onGenerateClick} // Use passed handler
+        colorScheme="purple"
+      />
+
+      <IconButton
+        aria-label="Pricing"
+        icon={<Icon as={FiTag} boxSize={6} />}
+        size="lg"
+        variant="ghost"
+        onClick={() => navigate("/pricing")}
         colorScheme="purple"
       />
     </Box>
@@ -503,15 +513,25 @@ const Header = () => {
           {/* Prevent shrinking */}
           {/* Desktop Upload/Generate Buttons - Always shown */}
           <Box display={{ base: "none", md: "flex" }} gap={2} alignItems="center">
-            <Button
-              size="sm"
-              variant="ghost"
-              colorScheme="purple"
-              fontWeight="600"
-              onClick={() => navigate("/pricing")}
+            <Tooltip
+              label="Pricing"
+              aria-label="Pricing tooltip"
+              placement="top"
+              bg={useColorModeValue("purple.100", "purple.700")}
+              color={useColorModeValue("purple.600", "purple.200")}
+              py={1}
+              px={2}
+              borderRadius="full"
             >
-              Pricing
-            </Button>
+              <IconButton
+                aria-label="Pricing"
+                icon={<Icon as={FiTag} boxSize={6} />}
+                size="lg"
+                variant="ghost"
+                onClick={() => navigate("/pricing")}
+                colorScheme="purple"
+              />
+            </Tooltip>
             <Tooltip
               label="Generate"
               aria-label="Generate tooltip"
