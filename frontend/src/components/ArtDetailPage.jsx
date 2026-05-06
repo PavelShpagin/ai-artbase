@@ -20,6 +20,7 @@ import {
 } from "@chakra-ui/react";
 import { IoArrowBackOutline } from "react-icons/io5";
 import { GoDownload } from "react-icons/go";
+import { FiAward } from "react-icons/fi";
 import Heart from "react-heart";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -361,6 +362,36 @@ const ArtDetailPage = () => {
                   >
                     <IoArrowBackOutline size={22} />
                   </Box>
+                  {/* Quality badge — shows our judge score so visitors see the UVP in action. */}
+                  {typeof art.quality_score === "number" && (
+                    <Box
+                      position="absolute"
+                      top="4"
+                      right="4"
+                      zIndex="10"
+                      display="flex"
+                      alignItems="center"
+                      gap={1.5}
+                      bg={
+                        art.quality_score >= 75
+                          ? "rgba(31,111,58,0.92)"
+                          : art.quality_score >= 55
+                          ? "rgba(168,107,0,0.92)"
+                          : "rgba(138,31,31,0.92)"
+                      }
+                      color="white"
+                      px={3}
+                      py={1.5}
+                      borderRadius="full"
+                      fontSize="sm"
+                      fontWeight="700"
+                      backdropFilter="blur(4px)"
+                      title={art.judge_notes || "AI ArtBase quality score"}
+                    >
+                      <Icon as={FiAward} boxSize={3.5} />
+                      {Math.round(art.quality_score)}%
+                    </Box>
+                  )}
                   <OptimizedImage
                     src={art.src}
                     objectFit="contain"

@@ -41,6 +41,7 @@ class Art(ArtBase):
     aesthetic_score: Optional[float] = None
     ai_obvious_score: Optional[float] = None
     quality_score: Optional[float] = None
+    judge_notes: Optional[str] = None
     is_curated: Optional[bool] = False
     is_premium: Optional[bool] = False
     date: datetime
