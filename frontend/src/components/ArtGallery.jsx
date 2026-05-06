@@ -360,9 +360,12 @@ export const ArtGallery = ({
     if (location.pathname.startsWith("/generate")) {
       return `generate-${user?.id}`;
     }
-    return location.pathname === "/"
-      ? `main-${searchQuery}`
-      : `detail-${location.pathname}`;
+    // Main gallery is mounted at /, /v1, /v2 ... /v5 (hero variants).
+    // All share the same arts feed, so they use the same cache key.
+    if (location.pathname === "/" || /^\/v[1-5]$/.test(location.pathname)) {
+      return `main-${searchQuery}`;
+    }
+    return `detail-${location.pathname}`;
   }, [location.pathname, searchQuery, user?.id]);
 
   const prevGetPathKeyRef = useRef(null);
@@ -475,7 +478,7 @@ export const ArtGallery = ({
 
     //const savedVisibleArts = localStorage.getItem(`visibleArts-${pathKey}`);
 
-    const savedVisibleArts = JSON.parse(localStorage.getItem(`arts-${pathKey}`))
+    const savedVisibleArts = (JSON.parse(localStorage.getItem(`arts-${pathKey}`)) || [])
       .slice(0, ITEMS_PER_PAGE * savedPage)
       .map((img) => ({
         id: img.id,
