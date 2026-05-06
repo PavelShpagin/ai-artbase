@@ -166,47 +166,108 @@ JUDGE_RUBRIC_INLINE = """You are a senior art director reviewing AI-generated im
 {"composition": int 0-10, "craftsmanship": int 0-10, "anatomy_or_subject_integrity": int 0-10, "wow_factor": int 0-10, "ai_obvious": int 0-10, "verdict": "<<=120 chars one-sentence verdict>"}
 ai_obvious is INVERSE: 0 = looks intentional/handmade, 10 = textbook AI slop (plastic skin, dead eyes, fused fingers, smear backgrounds, broken text)."""
 
-def _judge_image_bytes(image_bytes: bytes) -> Optional[dict]:
-    """Run Gemini judge on raw image bytes. Returns {aesthetic_score, ai_obvious_score, quality_score, judge_notes} or None."""
+def _scores_from_axes(comp: int, craft: int, integ: int, wow: int, ai: int, verdict: str = "") -> dict:
+    aesthetic = round((comp + craft + integ + wow) / 4.0, 2)
+    pos = comp * 1.5 + craft * 3.0 + integ * 2.0 + wow * 3.5
+    penalty = max(0.0, ai - 5) * 8.0
+    quality = round(max(0.0, min(100.0, pos - penalty)), 2)
+    notes = f"comp={comp} craft={craft} integrity={integ} wow={wow} ai={ai} | {(verdict or '')[:200]}"
+    return {"aesthetic_score": aesthetic, "ai_obvious_score": float(ai), "quality_score": quality, "judge_notes": notes}
+
+
+def _shrink_jpeg(image_bytes: bytes, max_px: int = 768) -> bytes:
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as im:
+            im = im.convert("RGB")
+            w, h = im.size
+            s = max_px / max(w, h)
+            if s < 1:
+                im = im.resize((int(w * s), int(h * s)), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=85)
+            return buf.getvalue()
+    except Exception:
+        return image_bytes
+
+
+def _judge_via_cloudflare(image_bytes: bytes) -> Optional[dict]:
+    """Free vision judge via Cloudflare Workers AI llava-1.5-7b-hf. ~10k neurons/day on free tier."""
+    cf_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+    cf_token = os.getenv("CLOUDFLARE_API_TOKEN")
+    if not (cf_account and cf_token and image_bytes):
+        return None
+    try:
+        import httpx
+        small = _shrink_jpeg(image_bytes, 512)
+        url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account}/ai/run/@cf/llava-hf/llava-1.5-7b-hf"
+        # llava-1.5 expects an image array of integer bytes
+        payload = {
+            "image": list(small),
+            "prompt": JUDGE_RUBRIC_INLINE + "\n\nReturn ONLY valid JSON.",
+            "max_tokens": 256,
+        }
+        r = httpx.post(url, headers={"Authorization": f"Bearer {cf_token}"}, json=payload, timeout=45)
+        r.raise_for_status()
+        text = (r.json().get("result") or {}).get("description") or (r.json().get("result") or {}).get("response") or ""
+        import re as _re
+        m = _re.search(r"\{[^{}]*\"composition\"[\s\S]*?\}", text)
+        if not m:
+            return None
+        # LLaVA often emits invalid JSON escapes (e.g. "\image"). Strip backslashes
+        # that aren't followed by a legal JSON escape char.
+        cleaned = _re.sub(r'\\(?![\\"/bfnrtu])', '', m.group(0))
+        try:
+            data = json.loads(cleaned)
+        except Exception:
+            return None
+        return _scores_from_axes(
+            int(data.get("composition", 0)), int(data.get("craftsmanship", 0)),
+            int(data.get("anatomy_or_subject_integrity", 0)), int(data.get("wow_factor", 0)),
+            int(data.get("ai_obvious", 0)), data.get("verdict", "") or "",
+        )
+    except Exception as e:
+        logger.warning(f"cloudflare judge failed: {e}")
+        return None
+
+
+def _judge_via_gemini(image_bytes: bytes) -> Optional[dict]:
     key = os.getenv("GEMINI_API_KEY")
     if not key or not image_bytes:
         return None
     try:
         import google.generativeai as genai
-        # genai already configured if we registered nano-banana, but cheap to reconfigure
         genai.configure(api_key=key)
         judge_model_id = os.getenv("JUDGE_MODEL", "gemini-2.5-flash-lite")
         m = genai.GenerativeModel(judge_model_id)
-        # Downscale via PIL so we don't ship the full PNG to the judge
-        try:
-            with Image.open(io.BytesIO(image_bytes)) as im:
-                im = im.convert("RGB")
-                w, h = im.size
-                s = 896 / max(w, h)
-                if s < 1:
-                    im = im.resize((int(w * s), int(h * s)), Image.LANCZOS)
-                buf = io.BytesIO()
-                im.save(buf, format="JPEG", quality=85)
-                small = buf.getvalue()
-        except Exception:
-            small = image_bytes
+        small = _shrink_jpeg(image_bytes, 896)
         resp = m.generate_content(
             [JUDGE_RUBRIC_INLINE, {"mime_type": "image/jpeg", "data": small}],
             generation_config={"temperature": 0.2, "response_mime_type": "application/json"},
         )
         data = json.loads(resp.text.strip())
-        comp = int(data.get("composition", 0)); craft = int(data.get("craftsmanship", 0))
-        integ = int(data.get("anatomy_or_subject_integrity", 0)); wow = int(data.get("wow_factor", 0))
-        ai = int(data.get("ai_obvious", 0))
-        aesthetic = round((comp + craft + integ + wow) / 4.0, 2)
-        pos = comp * 1.5 + craft * 3.0 + integ * 2.0 + wow * 3.5
-        penalty = max(0.0, ai - 5) * 8.0
-        quality = round(max(0.0, min(100.0, pos - penalty)), 2)
-        notes = f"comp={comp} craft={craft} integrity={integ} wow={wow} ai={ai} | {(data.get('verdict') or '')[:200]}"
-        return {"aesthetic_score": aesthetic, "ai_obvious_score": float(ai), "quality_score": quality, "judge_notes": notes}
+        return _scores_from_axes(
+            int(data.get("composition", 0)), int(data.get("craftsmanship", 0)),
+            int(data.get("anatomy_or_subject_integrity", 0)), int(data.get("wow_factor", 0)),
+            int(data.get("ai_obvious", 0)), data.get("verdict", "") or "",
+        )
     except Exception as e:
-        logger.warning(f"inline judge failed: {e}")
+        logger.warning(f"gemini judge failed: {e}")
         return None
+
+
+def _judge_image_bytes(image_bytes: bytes) -> Optional[dict]:
+    """Try preferred judge backend, fall back to the other. Order set by JUDGE_BACKEND env (gemini|cloudflare|both)."""
+    pref = os.getenv("JUDGE_BACKEND", "gemini").lower()
+    chain = {
+        "gemini": [_judge_via_gemini, _judge_via_cloudflare],
+        "cloudflare": [_judge_via_cloudflare, _judge_via_gemini],
+        "both": [_judge_via_gemini, _judge_via_cloudflare],
+    }.get(pref, [_judge_via_gemini, _judge_via_cloudflare])
+    for fn in chain:
+        out = fn(image_bytes)
+        if out:
+            return out
+    return None
 
 # ---- Anonymous IP-based rate limiter --------------------------------------
 FREE_ANON_PER_DAY = int(os.getenv("FREE_ANON_PER_DAY", "2"))
