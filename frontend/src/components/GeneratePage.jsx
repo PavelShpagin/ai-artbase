@@ -12,330 +12,223 @@ import {
   Wrap,
   WrapItem,
   Icon,
+  Badge,
+  HStack,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { FiCpu, FiImage } from "react-icons/fi";
+import { FiCpu, FiImage, FiZap, FiStar } from "react-icons/fi";
 import { ArtGallery } from "./ArtGallery";
 import fetchAPI from "../services/api";
 import { useUser } from "../contexts/UserContext";
-import { useAuthRedirect } from "../hooks/useAuthRedirect";
 import PurpleButton from "../components/Buttons";
-import { useLocation } from "react-router-dom";
 
-const availableModels = ["Imagen3"];
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://api.aiartbase.com";
+
+// Default lineup if /generate/models hasn't loaded yet.
+const DEFAULT_MODELS = [
+  { id: "flux-schnell", label: "Flux Schnell", tier: "free", note: "fast" },
+  { id: "sdxl", label: "Stable Diffusion XL", tier: "free", note: "" },
+  { id: "nano-banana", label: "Nano-Banana", tier: "pro", note: "Gemini 2.5" },
+];
 
 const GeneratePage = () => {
   const { user } = useUser();
-  const location = useLocation();
   const [prompt, setPrompt] = useState("");
-  const [selectedModels, setSelectedModels] = useState(availableModels);
+  const [models, setModels] = useState(DEFAULT_MODELS);
+  const [selectedModel, setSelectedModel] = useState("flux-schnell");
   const [isLoading, setIsLoading] = useState(false);
   const [visibleArts, setVisibleArts] = useState([]);
   const [arts, setArts] = useState([]);
-  const toast = useToast({
-    position: "top",
-    duration: 5000,
-    isClosable: true,
-  });
+  const [isPro, setIsPro] = useState(false);
+  const toast = useToast({ position: "top", duration: 5000, isClosable: true });
 
-  // Color mode values for styling
   const inputBg = useColorModeValue("gray.100", "gray.700");
   const inputHoverBg = useColorModeValue("gray.200", "gray.600");
   const focusBorderColor = useColorModeValue("purple.500", "purple.300");
   const selectedTagBg = useColorModeValue("purple.100", "purple.700");
   const selectedTagColor = useColorModeValue("purple.600", "purple.300");
 
-  const handleModelToggle = (model) => {
-    setSelectedModels((prev) =>
-      prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model]
-    );
+  // Load model registry from backend (graceful fallback)
+  useEffect(() => {
+    fetch(`${API_BASE}/generate/models`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length) setModels(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) { setIsPro(false); return; }
+    fetch(`${API_BASE}/credits/balance/${user.id}`)
+      .then((r) => r.json()).then((d) => setIsPro(!!d.is_pro)).catch(() => {});
+  }, [user?.id]);
+
+  const handleModelSelect = (model) => {
+    if (model.tier === "pro" && !isPro) {
+      toast({ title: "Pro model", description: "Upgrade to unlock Nano-Banana and Pro models.", status: "info" });
+      return;
+    }
+    setSelectedModel(model.id);
   };
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) {
-      toast({
-        title: "Prompt is empty",
-        description: "Please enter a prompt to generate images.",
-        status: "warning",
-      });
+      toast({ title: "Prompt is empty", status: "warning" });
       return;
     }
-    if (selectedModels.length === 0) {
-      toast({
-        title: "No models selected",
-        description: "Please select at least one model.",
-        status: "warning",
-      });
-      return;
-    }
-
     setIsLoading(true);
-
-    // Max retry attempts and initial delay
-    const MAX_RETRIES = 3;
-    const INITIAL_DELAY = 2000; // 2 seconds
-
-    const attemptGeneration = async (retryCount) => {
-      try {
-        ////console.log(`Generation attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
-
-        // Show retry message if this is a retry attempt
-        if (retryCount > 0) {
-          toast({
-            title: `Retry ${retryCount}/${MAX_RETRIES}`,
-            description: "Previous attempt didn't return images. Retrying...",
-            status: "info",
-            duration: 2000,
-            isClosable: true,
-          });
-        }
-
-        const response = await fetchAPI(
-          `/generate/image/?prompt=${prompt}&user_id=${
-            user ? user.id : 4
-          }&number_of_images=1`,
-          "POST",
-          null,
-          {
-            "Content-Type": "application/json",
-            accept: "application/json",
-          },
-          false,
-          true
-        );
-
-        // Check for HTTP errors
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-
-          // Special handling for the "no images" error - retry if we haven't maxed out
-          if (
-            errorData.detail ===
-              "Image generation call succeeded but returned no images." &&
-            retryCount < MAX_RETRIES
-          ) {
-            // Exponential backoff
-            const delay = INITIAL_DELAY * Math.pow(2, retryCount);
-            //console.log(`No images returned. Retrying in ${delay}ms...`);
-
-            // Wait before retrying
-            await new Promise((resolve) => setTimeout(resolve, delay));
-
-            // Recursively retry
-            return attemptGeneration(retryCount + 1);
-          }
-
-          throw new Error(errorData.detail || "Failed to generate images");
-        }
-        // Parse the response
-        const responseData = await response.json();
-        //console.log("Response data:", responseData);
-
-        // Handle direct array of arts
-        if (Array.isArray(responseData)) {
-          if (responseData.length === 0 && retryCount < MAX_RETRIES) {
-            // Empty array but we can retry
-            const delay = INITIAL_DELAY * Math.pow(2, retryCount);
-            //console.log(`Empty arts array. Retrying in ${delay}ms...`);
-
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            return attemptGeneration(retryCount + 1);
-          }
-
-          return responseData;
-        }
-
-        // If we got here with data but in an unexpected format
-        throw new Error("Unexpected API response format");
-      } catch (error) {
-        // If this is a retry-eligible error and we haven't maxed out retries
-        if (
-          error.message ===
-            "Image generation call succeeded but returned no images." &&
-          retryCount < MAX_RETRIES
-        ) {
-          const delay = INITIAL_DELAY * Math.pow(2, retryCount);
-          //console.log(`Error: ${error.message}. Retrying in ${delay}ms...`);
-
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          return attemptGeneration(retryCount + 1);
-        }
-
-        // Either not a retry-eligible error or we've maxed out retries
-        throw error;
-      }
-    };
-
-    // Start the attempt/retry process
     try {
-      const newArts = await attemptGeneration(0);
-
-      if (newArts && newArts.length > 0) {
+      const params = new URLSearchParams({
+        prompt,
+        model: selectedModel,
+        number_of_images: "1",
+      });
+      if (user?.id) params.set("user_id", String(user.id));
+      const response = await fetchAPI(
+        `/generate/image/?${params.toString()}`,
+        "POST",
+        null,
+        { "Content-Type": "application/json", accept: "application/json" },
+        false,
+        true
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        if (response.status === 402) {
+          toast({
+            title: "Limit reached",
+            description: err?.detail?.message || "Free limit reached. Sign in or buy a credit pack.",
+            status: "warning",
+          });
+        } else {
+          toast({ title: "Generation failed", description: err?.detail || "Try again", status: "error" });
+        }
+        return;
+      }
+      const newArts = await response.json();
+      if (Array.isArray(newArts) && newArts.length) {
         setVisibleArts((prev) => [...newArts, ...prev]);
         setArts((prev) => [...newArts, ...prev]);
-
-        const storageKey = `arts-generate-${user?.id}`;
-        const arts = JSON.parse(localStorage.getItem(`${storageKey}`)) || [];
-        const updatedArts = [...newArts, ...arts];
-        localStorage.setItem(`${storageKey}`, JSON.stringify(updatedArts));
-
+        if (user?.id) {
+          const storageKey = `arts-generate-${user.id}`;
+          const existing = JSON.parse(localStorage.getItem(storageKey)) || [];
+          localStorage.setItem(storageKey, JSON.stringify([...newArts, ...existing]));
+        }
+        const score = newArts[0]?.quality_score;
         toast({
-          title: "Images generated!",
+          title: "Image generated",
+          description: typeof score === "number" ? `Quality score: ${Math.round(score)}/100` : undefined,
           status: "success",
         });
       } else {
-        // This shouldn't happen due to our retry logic, but just in case
-        throw new Error("No images were generated after all attempts");
+        toast({ title: "No image returned", status: "warning" });
       }
-    } catch (error) {
-      //console.error("Generation failed:", error);
-      toast({
-        title: "Generation failed",
-        description:
-          error.message || "Could not generate images after multiple attempts.",
-        status: "error",
-      });
+    } catch (e) {
+      toast({ title: "Generation failed", description: e.message || "", status: "error" });
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, selectedModels, user, toast]);
+  }, [prompt, selectedModel, user, toast]);
 
-  // Custom fetchArts function for ArtGallery
+  // Fetch user's prior generations only when signed in
   const fetchArts = useCallback(async () => {
-    const storageKey = `arts-generate-${user?.id}`;
-    const localArts = localStorage.getItem(`${storageKey}`);
-
-    //console.log("localArts", localArts);
-
-    if (!user && !localArts) {
-      //console.log("setting localArts");
-      localStorage.setItem(`${storageKey}`, JSON.stringify([]));
-      return;
-    }
-
-    if (localArts) {
-      return;
-    }
-
-    const data = await fetchAPI(
-      `/arts/generated/${user.id}?viewer_id=${user.id}`
-    );
-
-    localStorage.setItem(`${storageKey}`, JSON.stringify(data));
-
-    localStorage.setItem(`${storageKey}-user`, user.id);
+    if (!user?.id) return;
+    const storageKey = `arts-generate-${user.id}`;
+    if (localStorage.getItem(storageKey)) return;
+    try {
+      const data = await fetchAPI(`/arts/generated/${user.id}?viewer_id=${user.id}`);
+      localStorage.setItem(storageKey, JSON.stringify(data));
+    } catch (_) {}
   }, [user]);
 
   const emptyState = (
-    <Flex
-      justify="center"
-      align="center"
-      height="50vh"
-      direction="column"
-      color="gray.400"
-    >
+    <Flex justify="center" align="center" height="50vh" direction="column" color="gray.400">
       <Icon as={FiImage} boxSize={12} mb={4} />
-      <Text>Your generated images will appear here.</Text>
+      <Text textAlign="center">Your generated images will appear here.</Text>
+      {!user && (
+        <Text fontSize="sm" mt={2} maxW="320px" textAlign="center">
+          No sign-in needed to try free models. Sign in to keep history and unlock Pro models.
+        </Text>
+      )}
     </Flex>
   );
 
   return (
-    <Flex
-      direction={{ base: "column", lg: "row" }}
-      pt="15px"
-      px={{ base: 4, md: 8 }}
-      gap={6}
-    >
-      {/* Left Column: Controls */}
+    <Flex direction={{ base: "column", lg: "row" }} pt="15px" px={{ base: 4, md: 8 }} gap={6}>
       <Box flex={{ base: "1", lg: "0 0 400px" }} mb={{ base: 6, lg: 0 }}>
         <VStack spacing={6} align="stretch">
           <Flex align="center" mb={0}>
             <Icon as={FiCpu} color="purple.500" fontSize="24px" mr={2} />
-            <Heading size="lg" color="gray.700" fontWeight="600">
-              Generate AI Images
-            </Heading>
+            <Heading size="lg" color="gray.700" fontWeight="600">Generate</Heading>
           </Flex>
-
-          {/* Prompt Input */}
           <Box>
-            <Text mb="8px" fontWeight="medium">
-              Prompt:
-            </Text>
+            <Text mb="8px" fontWeight="medium">Prompt</Text>
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Enter your creative prompt here..."
+              placeholder="A cinematic portrait of a snow leopard at golden hour..."
               size="lg"
-              minHeight="150px"
+              minHeight="140px"
               bg={inputBg}
               _hover={{ bg: inputHoverBg }}
-              _focus={{
-                borderColor: focusBorderColor,
-                boxShadow: `0 0 0 1px ${focusBorderColor}`,
-                bg: inputBg,
-              }}
+              _focus={{ borderColor: focusBorderColor, boxShadow: `0 0 0 1px ${focusBorderColor}`, bg: inputBg }}
               borderRadius="xl"
             />
           </Box>
-
-          {/* Model Selection */}
           <Box>
-            <Text mb="8px" fontWeight="medium">
-              Models:
-            </Text>
+            <HStack mb="8px" spacing={2}>
+              <Text fontWeight="medium">Model</Text>
+              <Text fontSize="xs" color="gray.500">(quality scored automatically)</Text>
+            </HStack>
             <Wrap spacing={2}>
-              {availableModels.map((model) => {
-                const isSelected = selectedModels.includes(model);
+              {models.map((m) => {
+                const isSelected = selectedModel === m.id;
+                const locked = m.tier === "pro" && !isPro;
                 return (
-                  <WrapItem key={model}>
+                  <WrapItem key={m.id}>
                     <Tag
                       size="lg"
                       variant={isSelected ? "solid" : "outline"}
-                      colorScheme={isSelected ? undefined : "gray"}
                       bg={isSelected ? selectedTagBg : undefined}
                       color={isSelected ? selectedTagColor : undefined}
-                      onClick={() => handleModelToggle(model)}
-                      cursor="pointer"
+                      onClick={() => handleModelSelect(m)}
+                      cursor={locked ? "not-allowed" : "pointer"}
+                      opacity={locked ? 0.5 : 1}
                       borderRadius="full"
                       px={4}
                       py={1.5}
-                      borderColor={
-                        isSelected
-                          ? selectedTagColor
-                          : useColorModeValue("gray.200", "gray.600")
-                      }
+                      borderColor={isSelected ? selectedTagColor : useColorModeValue("gray.200", "gray.600")}
                     >
-                      {model}
+                      <HStack spacing={1.5}>
+                        <Icon as={m.tier === "pro" ? FiStar : FiZap} boxSize={3.5} />
+                        <Text>{m.label}</Text>
+                        {m.tier === "pro" && (
+                          <Badge colorScheme="purple" fontSize="0.65em">PRO</Badge>
+                        )}
+                      </HStack>
                     </Tag>
                   </WrapItem>
                 );
               })}
             </Wrap>
           </Box>
-
-          {/* Generate Button */}
           <PurpleButton
-            name={isLoading ? "Generating..." : "Generate Images"}
+            name={isLoading ? "Generating..." : "Generate"}
             onClick={handleGenerate}
             loading={isLoading}
-            // leftIcon={isLoading ? <Spinner size="sm" /> : undefined}
             size="lg"
             w="full"
           />
+          {!user && (
+            <Text fontSize="xs" color="gray.500" textAlign="center">
+              Free anonymous tier: 2 images/day. Sign in for 5/day.
+            </Text>
+          )}
         </VStack>
       </Box>
-
-      {/* Right Column: Gallery */}
-      <Box
-        flex="1"
-        minHeight="80vh"
-        borderLeft={{ lg: "1px solid" }}
-        borderColor={{ lg: "gray.200" }}
-        pl={{ lg: 6 }}
-      >
-        <Heading size="md" mb={4} color="gray.600">
-          Generated Gallery
-        </Heading>
+      <Box flex="1" minHeight="80vh" borderLeft={{ lg: "1px solid" }} borderColor={{ lg: "gray.200" }} pl={{ lg: 6 }}>
+        <Heading size="md" mb={4} color="gray.600">Recent Generations</Heading>
         <ArtGallery
           fetchArts={fetchArts}
           visibleArts={visibleArts}

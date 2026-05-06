@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException, Body, Query, Request
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import case, func, text, exists, and_, literal, select
 from .. import schemas, models
@@ -102,84 +102,129 @@ class GeminiImageGenerationModel:
             logger.error(f"Failed to extract image bytes from Gemini response: {e}")
         return None
 
-logger.info("Initializing image generation backend...")
-generation_model = None
-generation_backend = "none"
+logger.info("Initializing image generation backends...")
 
-# Preferred: Cloudflare Workers AI flux-1-schnell. Free up to 10k neurons/day, no quota dance.
-cf_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-cf_token = os.getenv("CLOUDFLARE_API_TOKEN")
-if cf_account and cf_token:
+# ---- Model registry --------------------------------------------------------
+# Each entry: id -> {label, tier (free|pro), factory, public}
+# Factory returns a generator object exposing .generate_images(prompt, number_of_images).
+GENERATION_MODELS: dict = {}
+
+def _register_cloudflare(model_id: str, label: str, cf_id: str, tier: str = "free"):
+    cf_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+    cf_token = os.getenv("CLOUDFLARE_API_TOKEN")
+    if not (cf_account and cf_token):
+        return
     try:
-        cf_model_name = os.getenv("CLOUDFLARE_AI_MODEL", "@cf/black-forest-labs/flux-1-schnell")
-        generation_model = CloudflareWorkersAIModel(cf_account, cf_token, cf_model_name)
-        generation_backend = f"cloudflare:{cf_model_name}"
-        logger.info(f"Image generation backend: {generation_backend}")
+        instance = CloudflareWorkersAIModel(cf_account, cf_token, cf_id)
+        GENERATION_MODELS[model_id] = {"label": label, "tier": tier, "instance": instance, "backend": f"cloudflare:{cf_id}"}
+        logger.info(f"  registered {model_id} -> cloudflare {cf_id} ({tier})")
     except Exception as e:
-        logger.error(f"Cloudflare Workers AI init failed: {e}")
-        generation_model = None
+        logger.error(f"  failed to register {model_id}: {e}")
 
-# Fallback: nano-banana / Gemini 2.5 Flash Image (paid). Uses GEMINI_API_KEY.
-gemini_key = os.getenv("GEMINI_API_KEY") if generation_model is None else None
-if gemini_key:
+
+def _register_gemini(model_id: str, label: str, gemini_id: str, tier: str = "pro"):
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        return
     try:
         import google.generativeai as genai
-        genai.configure(api_key=gemini_key)
-        gemini_model_name = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image-preview")
-        generation_model = GeminiImageGenerationModel(gemini_model_name)
-        generation_backend = f"gemini:{gemini_model_name}"
-        logger.info(f"Image generation backend: {generation_backend}")
+        genai.configure(api_key=key)
+        instance = GeminiImageGenerationModel(gemini_id)
+        GENERATION_MODELS[model_id] = {"label": label, "tier": tier, "instance": instance, "backend": f"gemini:{gemini_id}"}
+        logger.info(f"  registered {model_id} -> gemini {gemini_id} ({tier})")
     except Exception as e:
-        logger.error(f"Gemini image-gen init failed, will try Vertex fallback: {e}")
-        generation_model = None
+        logger.error(f"  failed to register {model_id}: {e}")
 
-# Fallback 1: Vertex AI Imagen 3 (requires GCP billing on the project).
-if generation_model is None:
-    try:
-        private_key_raw = os.getenv("GCP_SA_PRIVATE_KEY")
-        if not private_key_raw:
-            raise ValueError("GCP_SA_PRIVATE_KEY environment variable is not set")
-        sa_info = {
-            "type": os.getenv("GCP_SA_TYPE", "service_account"),
-            "project_id": os.getenv("GCP_SA_PROJECT_ID"),
-            "private_key_id": os.getenv("GCP_SA_PRIVATE_KEY_ID"),
-            "private_key": private_key_raw.replace('\\n', '\n'),
-            "client_email": os.getenv("GCP_SA_CLIENT_EMAIL"),
-            "client_id": os.getenv("GCP_SA_CLIENT_ID"),
-            "auth_uri": os.getenv("GCP_SA_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
-            "token_uri": os.getenv("GCP_SA_TOKEN_URI", "https://oauth2.googleapis.com/token"),
-            "auth_provider_x509_cert_url": os.getenv("GCP_SA_AUTH_PROVIDER_URL", "https://www.googleapis.com/oauth2/v1/certs"),
-            "client_x509_cert_url": os.getenv("GCP_SA_CLIENT_CERT_URL"),
-            "universe_domain": "googleapis.com",
-        }
-        if not all([sa_info["project_id"], sa_info["private_key"], sa_info["client_email"]]):
-            raise ValueError("Missing essential GCP service account environment variables.")
-        credentials = service_account.Credentials.from_service_account_info(sa_info)
-        import vertexai
-        from vertexai.preview.vision_models import ImageGenerationModel
-        PROJECT_ID = sa_info["project_id"]
-        LOCATION = os.getenv("GCP_LOCATION", "us-central1")
-        vertexai.init(project=PROJECT_ID, location=LOCATION, credentials=credentials)
-        generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-002")
-        generation_backend = f"vertex-imagen3:{LOCATION}"
-        logger.info(f"Image generation backend: {generation_backend}")
-    except Exception as e:
-        logger.error(f"Vertex Imagen init failed: {e}")
-        generation_model = None
 
-# Fallback 2: mock (only for local development).
-if generation_model is None:
+_register_cloudflare("flux-schnell", "Flux Schnell", "@cf/black-forest-labs/flux-1-schnell", tier="free")
+_register_cloudflare("sdxl", "Stable Diffusion XL", "@cf/stabilityai/stable-diffusion-xl-base-1.0", tier="free")
+_register_cloudflare("dreamshaper", "Dreamshaper 8", "@cf/lykon/dreamshaper-8-lcm", tier="free")
+_register_gemini("nano-banana", "Nano-Banana", os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"), tier="pro")
+
+# Mock fallback so the route never 503s during local dev with no keys.
+if not GENERATION_MODELS:
     try:
         import sys
         sys.path.append(os.path.dirname(os.path.dirname(__file__)))
         from mock_image_generation import MockImageGenerationModel
-        generation_model = MockImageGenerationModel.from_pretrained("mock-imagen-3.0")
-        generation_backend = "mock"
-        logger.info("Image generation backend: mock (no real API available)")
-    except Exception as mock_error:
-        logger.error(f"Failed to initialize mock generation: {mock_error}")
+        GENERATION_MODELS["flux-schnell"] = {
+            "label": "Mock", "tier": "free",
+            "instance": MockImageGenerationModel.from_pretrained("mock"),
+            "backend": "mock",
+        }
+        logger.warning("  no real backends; using mock model")
+    except Exception as e:
+        logger.error(f"  mock init failed: {e}")
 
-logger.info(f"Image generation initialization finished. backend={generation_backend}, model_set={generation_model is not None}")
+# Default fallback used by anything that still references generation_model.
+generation_model = next((m["instance"] for m in GENERATION_MODELS.values()), None)
+generation_backend = next((m["backend"] for m in GENERATION_MODELS.values()), "none")
+logger.info(f"Image generation initialization finished. {len(GENERATION_MODELS)} model(s); default={generation_backend}")
+
+# ---- Inline quality judge --------------------------------------------------
+JUDGE_RUBRIC_INLINE = """You are a senior art director reviewing AI-generated images. Rate strictly. Return STRICT JSON:
+{"composition": int 0-10, "craftsmanship": int 0-10, "anatomy_or_subject_integrity": int 0-10, "wow_factor": int 0-10, "ai_obvious": int 0-10, "verdict": "<<=120 chars one-sentence verdict>"}
+ai_obvious is INVERSE: 0 = looks intentional/handmade, 10 = textbook AI slop (plastic skin, dead eyes, fused fingers, smear backgrounds, broken text)."""
+
+def _judge_image_bytes(image_bytes: bytes) -> Optional[dict]:
+    """Run Gemini judge on raw image bytes. Returns {aesthetic_score, ai_obvious_score, quality_score, judge_notes} or None."""
+    key = os.getenv("GEMINI_API_KEY")
+    if not key or not image_bytes:
+        return None
+    try:
+        import google.generativeai as genai
+        # genai already configured if we registered nano-banana, but cheap to reconfigure
+        genai.configure(api_key=key)
+        judge_model_id = os.getenv("JUDGE_MODEL", "gemini-2.5-flash-lite")
+        m = genai.GenerativeModel(judge_model_id)
+        # Downscale via PIL so we don't ship the full PNG to the judge
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as im:
+                im = im.convert("RGB")
+                w, h = im.size
+                s = 896 / max(w, h)
+                if s < 1:
+                    im = im.resize((int(w * s), int(h * s)), Image.LANCZOS)
+                buf = io.BytesIO()
+                im.save(buf, format="JPEG", quality=85)
+                small = buf.getvalue()
+        except Exception:
+            small = image_bytes
+        resp = m.generate_content(
+            [JUDGE_RUBRIC_INLINE, {"mime_type": "image/jpeg", "data": small}],
+            generation_config={"temperature": 0.2, "response_mime_type": "application/json"},
+        )
+        data = json.loads(resp.text.strip())
+        comp = int(data.get("composition", 0)); craft = int(data.get("craftsmanship", 0))
+        integ = int(data.get("anatomy_or_subject_integrity", 0)); wow = int(data.get("wow_factor", 0))
+        ai = int(data.get("ai_obvious", 0))
+        aesthetic = round((comp + craft + integ + wow) / 4.0, 2)
+        pos = comp * 1.5 + craft * 3.0 + integ * 2.0 + wow * 3.5
+        penalty = max(0.0, ai - 5) * 8.0
+        quality = round(max(0.0, min(100.0, pos - penalty)), 2)
+        notes = f"comp={comp} craft={craft} integrity={integ} wow={wow} ai={ai} | {(data.get('verdict') or '')[:200]}"
+        return {"aesthetic_score": aesthetic, "ai_obvious_score": float(ai), "quality_score": quality, "judge_notes": notes}
+    except Exception as e:
+        logger.warning(f"inline judge failed: {e}")
+        return None
+
+# ---- Anonymous IP-based rate limiter --------------------------------------
+FREE_ANON_PER_DAY = int(os.getenv("FREE_ANON_PER_DAY", "2"))
+ANON_OWNER_ID = int(os.getenv("ANON_OWNER_ID", "4"))
+_anon_usage: dict = {}  # { (ip, date): count }
+
+def _anon_can_generate(ip: str) -> tuple[bool, int]:
+    today = datetime.utcnow().date().isoformat()
+    # GC: drop entries for older days
+    for k in list(_anon_usage.keys()):
+        if k[1] != today:
+            _anon_usage.pop(k, None)
+    used = _anon_usage.get((ip, today), 0)
+    return used < FREE_ANON_PER_DAY, max(0, FREE_ANON_PER_DAY - used)
+
+def _anon_increment(ip: str):
+    today = datetime.utcnow().date().isoformat()
+    _anon_usage[(ip, today)] = _anon_usage.get((ip, today), 0) + 1
 
 router = APIRouter()
 
@@ -742,122 +787,138 @@ async def get_batch_arts(
     
     return arts_with_likes
 
+@router.get("/generate/models")
+async def list_generation_models():
+    """Public list of available generation models for the frontend lineup."""
+    return [
+        {"id": mid, "label": meta["label"], "tier": meta["tier"], "backend": meta["backend"]}
+        for mid, meta in GENERATION_MODELS.items()
+    ]
+
+
 @router.post("/generate/image/", response_model=List[schemas.Art])
 async def generate_image_from_prompt(
+    request: Request,
     prompt: str,
-    user_id: Optional[int] = Query(4),  # Default to 4 if not provided
-    number_of_images: Optional[int] = Query(1, ge=1, le=4),  # Default 1, min 1, max 4
-    db: Session = Depends(get_db)
+    model: str = Query("flux-schnell"),
+    user_id: Optional[int] = Query(None),
+    number_of_images: Optional[int] = Query(1, ge=1, le=4),
+    db: Session = Depends(get_db),
 ):
-    if user_id is None:
-        user_id = 4
+    if not GENERATION_MODELS:
+        raise HTTPException(status_code=503, detail="No image generation backends are configured.")
 
-    if not generation_model: # Check if the Vertex AI model was initialized
-        raise HTTPException(status_code=503, detail="Image generation service model is not available.")
+    # Resolve model — fall back to first available if requested id missing.
+    chosen_id = model if model in GENERATION_MODELS else next(iter(GENERATION_MODELS))
+    chosen = GENERATION_MODELS[chosen_id]
 
-    # Credit / free-tier gate. Each requested image costs either 1 free slot or 1 credit.
-    from .credits import can_generate, consume_credit_if_paid
+    # Pro tier check
+    if chosen["tier"] == "pro":
+        if not user_id:
+            raise HTTPException(status_code=402, detail={
+                "code": "pro_required", "message": f"{chosen['label']} requires Pro. Sign in and upgrade.",
+            })
+        from .credits import _user_is_pro
+        u = db.query(models.User).filter(models.User.id == user_id).first()
+        if not _user_is_pro(u):
+            raise HTTPException(status_code=402, detail={
+                "code": "pro_required", "message": f"{chosen['label']} requires Pro. Upgrade on /pricing.",
+            })
+
+    # Rate-limit gate
     needed = int(number_of_images or 1)
-    sources = []  # list of "free" or "credits" per image we'll deliver
-    # Greedy: use free first, then credits.
-    for _ in range(needed):
-        gate = can_generate(db, user_id)
-        if not gate["allowed"]:
-            if not sources:
-                raise HTTPException(status_code=402, detail={
-                    "code": "out_of_credits",
-                    "message": f"Free limit reached and 0 credits. Buy a pack to continue.",
-                    "balance": gate["balance"],
-                    "free_remaining_today": gate["free_remaining"],
-                })
-            # Some images allowed; trim request size to what we can serve.
-            number_of_images = len(sources)
-            break
-        sources.append(gate["source"])
-        # If we picked credits, eagerly decrement so we don't double-spend on next iter.
-        if gate["source"] == "credits":
-            consume_credit_if_paid(db, user_id, "credits")
+    if user_id:
+        from .credits import can_generate, consume_credit_if_paid
+        sources: list = []
+        for _ in range(needed):
+            gate = can_generate(db, user_id)
+            if not gate["allowed"]:
+                if not sources:
+                    raise HTTPException(status_code=402, detail={
+                        "code": "out_of_credits",
+                        "message": "Free limit reached and 0 credits. Buy a pack to continue.",
+                        "balance": gate["balance"],
+                        "free_remaining_today": gate["free_remaining"],
+                    })
+                needed = len(sources)
+                break
+            sources.append(gate["source"])
+            if gate["source"] == "credits":
+                consume_credit_if_paid(db, user_id, "credits")
+        owner_id_for_art = user_id
+    else:
+        # Anonymous: IP rate-limited, free-tier model only
+        if chosen["tier"] != "free":
+            raise HTTPException(status_code=402, detail={
+                "code": "pro_required", "message": "Sign in to use this model."})
+        ip = (request.client.host if request.client else "unknown") or "unknown"
+        allowed, remaining = _anon_can_generate(ip)
+        if not allowed:
+            raise HTTPException(status_code=402, detail={
+                "code": "anon_limit",
+                "message": "Anonymous limit reached for today. Sign in for 5 free images/day.",
+            })
+        needed = 1  # Anon always 1 at a time
+        _anon_increment(ip)
+        owner_id_for_art = ANON_OWNER_ID
 
     try:
-        print(f"Generating image with prompt: {prompt}, count: {number_of_images}")
-        # API call using the Vertex AI model instance
-        response = generation_model.generate_images(
-            prompt=prompt,
-            number_of_images=number_of_images,  # Use the query parameter instead of request field
-        )
-
-    except AttributeError as ae:
-        print(f"AttributeError during API call: model object or response structure error. Error: {ae}")
-        raise HTTPException(status_code=500, detail=f"API structure error: {ae}")
+        logger.info(f"generating prompt={prompt!r} model={chosen_id} count={needed} owner={owner_id_for_art}")
+        response = chosen["instance"].generate_images(prompt=prompt, number_of_images=needed)
     except Exception as e:
-        print(f"Error calling Vertex AI Imagen API: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate image: {str(e)}")
+        logger.error(f"image generation call failed ({chosen['backend']}): {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate image: {e}")
+
+    if not getattr(response, "images", None):
+        raise HTTPException(status_code=500, detail="Image generation returned no images.")
 
     created_arts = []
-    if not hasattr(response, 'images') or not response.images:
-         print(f"Warning: No images found in the response from Vertex AI.")
-         raise HTTPException(status_code=500, detail="Image generation call succeeded but returned no images.")
-
     for i, generated_image in enumerate(response.images):
-        try:
-            image_bytes = generated_image._image_bytes # Common pattern, verify with SDK docs
-
-            if not image_bytes:
-                print(f"Warning: Generated image {i} has no image bytes.")
-                continue
-
-            # --- Get image dimensions ---
-            try:
-                with Image.open(io.BytesIO(image_bytes)) as img:
-                    width, height = img.size
-            except Exception as img_err:
-                print(f"Warning: Could not read dimensions for generated image {i}. Error: {img_err}")
-                width, height = 0, 0 # Assign default or skip? Skipping might be safer.
-
-            prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
-            # Use PNG for generated images, adjust if necessary
-            unique_filename = f"generated_{prompt_hash}_{i}.png"
-            content_type = 'image/png'
-
-            image_url = await upload_image_bytes_to_r2(image_bytes, unique_filename, content_type=content_type)
-            print(f"Uploaded generated image to: {image_url}")
-
-            # --- Create Art and GeneratedArt records if user_id is provided ---
-            if user_id is not None and width > 0 and height > 0:
-                try:
-                    # Create Art record with is_generated and is_public
-                    db_art = models.Art(
-                        width=width,
-                        height=height,
-                        prompt=prompt,
-                        src=image_url,
-                        owner_id=user_id,
-                        is_generated=True,   # <--- Set to True
-                        is_public=False      # <--- Set to False
-                    )
-                    db.add(db_art)
-                    db.commit()
-                    db.refresh(db_art)
-                    print(f"Created Art record (ID: {db_art.id}) for user {user_id}.")
-                    created_arts.append(db_art)
-                except Exception as db_err:
-                    db.rollback()
-                    print(f"Error creating database record for generated image {i} (User: {user_id}): {db_err}")
-                    # Continue, but do not add to generated_arts (which is now removed)
-
-            # --- End record creation ---
-
-        except AttributeError as ae:
-            print(f"Warning: Generated image {i} structure unexpected or missing data (_image_bytes attribute?). Error: {ae}")
+        image_bytes = getattr(generated_image, "_image_bytes", None)
+        if not image_bytes:
             continue
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as img:
+                width, height = img.size
+        except Exception:
+            width, height = 0, 0
+        if width <= 0 or height <= 0:
+            continue
+
+        prompt_hash = hashlib.md5(f"{prompt}:{datetime.utcnow().isoformat()}".encode()).hexdigest()[:16]
+        unique_filename = f"generated_{prompt_hash}_{i}.png"
+        try:
+            image_url = await upload_image_bytes_to_r2(image_bytes, unique_filename, content_type="image/png")
         except Exception as e:
-            print(f"Failed to process or upload generated image {i} to R2: {str(e)}")
-            continue # Try next image if one fails
+            logger.error(f"r2 upload failed: {e}")
+            continue
+
+        # Inline quality judge — best-effort, never blocks success
+        scores = _judge_image_bytes(image_bytes) or {}
+
+        try:
+            db_art = models.Art(
+                width=width, height=height,
+                prompt=prompt, src=image_url,
+                owner_id=owner_id_for_art,
+                is_generated=True, is_public=False,
+                aesthetic_score=scores.get("aesthetic_score"),
+                ai_obvious_score=scores.get("ai_obvious_score"),
+                quality_score=scores.get("quality_score"),
+                judge_notes=scores.get("judge_notes"),
+                judged_at=datetime.utcnow() if scores else None,
+            )
+            db.add(db_art)
+            db.commit()
+            db.refresh(db_art)
+            created_arts.append(db_art)
+        except Exception as e:
+            db.rollback()
+            logger.error(f"db insert failed for generated image: {e}")
 
     if not created_arts:
         raise HTTPException(status_code=500, detail="Image generation succeeded but failed to create any art records.")
 
-    # Return the created Art objects instead of just URLs
     return created_arts
     
 

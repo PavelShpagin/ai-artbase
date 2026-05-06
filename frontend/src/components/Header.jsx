@@ -320,8 +320,7 @@ const Header = () => {
   };
 
   const handleGenerateClick = () => {
-    // Navigate to the generate page
-    sessionStorage.setItem(`scrollPosition-generate-${user.id}`, "0");
+    sessionStorage.setItem(`scrollPosition-generate-${user?.id ?? "anon"}`, "0");
     window.scrollTo(0, 0);
     navigate("/generate");
   };

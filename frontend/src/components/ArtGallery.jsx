@@ -360,9 +360,7 @@ export const ArtGallery = ({
     if (location.pathname.startsWith("/generate")) {
       return `generate-${user?.id}`;
     }
-    // Main gallery is mounted at /, /v1, /v2 ... /v5 (hero variants).
-    // All share the same arts feed, so they use the same cache key.
-    if (location.pathname === "/" || /^\/v[1-5]$/.test(location.pathname)) {
+    if (location.pathname === "/") {
       return `main-${searchQuery}`;
     }
     return `detail-${location.pathname}`;
